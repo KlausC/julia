@@ -379,3 +379,26 @@ end
     @test coalesce(nothing, missing) === nothing
     @test coalesce(missing, nothing) === nothing
 end
+
+@testset "sort $(eltype(X))" for (X, P) in
+    (([2, missing, -2, 5, missing], [3, 1, 4, 2, 5]),
+     ([NaN, missing, 5, -0.0, NaN, missing, Inf, 0.0, -Inf], [9, 4, 8, 3, 7, 1, 5, 2, 6]),
+     ([missing, "a", "c", missing, "b"], [2, 5, 3, 1, 4]))
+    @test isequal(sortperm(X), P)
+    @test isequal(sortperm(X, alg=QuickSort), P)
+    @test isequal(sortperm(X, alg=MergeSort), P)
+
+    @test isequal(sort(X), X[P])
+    @test isequal(sort(X, alg=QuickSort), X[P])
+    @test isequal(sort(X, alg=MergeSort), X[P])
+
+    RX = reverse(X[P])
+
+    @test isequal(X[sortperm(X, rev=true)], RX)
+    @test isequal(X[sortperm(X, alg=QuickSort, rev=true)], RX)
+    @test isequal(X[sortperm(X, alg=MergeSort, rev=true)], RX)
+
+    @test isequal(sort(X, rev=true), RX)
+    @test isequal(sort(X, alg=QuickSort, rev=true), RX)
+    @test isequal(sort(X, alg=MergeSort, rev=true), RX)
+end
