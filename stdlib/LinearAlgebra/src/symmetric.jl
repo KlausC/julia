@@ -1,19 +1,21 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-# Symmetric and Hermitian matrices
-struct Symmetric{T,S<:AbstractMatrix{<:T}} <: AbstractMatrix{T}
-    data::S
-    uplo::Char
+const UPPER = Val(:U)
+const LOWER = Val(:L)
 
-    function Symmetric{T,S}(data, uplo) where {T,S<:AbstractMatrix{<:T}}
+# Symmetric and Hermitian matrices
+struct Symmetric{T,S<:AbstractMatrix{<:T},U} <: AbstractMatrix{T}
+    data::S
+
+    function Symmetric{T,S,U}(data) where {T,S<:AbstractMatrix{<:T},U}
         @assert !has_offset_axes(data)
-        new{T,S}(data, uplo)
+        new{T,S,U}(data)
     end
 end
 """
-    Symmetric(A, uplo=:U)
+    Symmetric(A, uplo={UPPER|LOWER})
 
-Construct a `Symmetric` view of the upper (if `uplo = :U`) or lower (if `uplo = :L`)
+Construct a `Symmetric` view of the upper (if `uplo = UPPER`) or lower (if `uplo = LOWER`)
 triangle of the matrix `A`.
 
 # Examples
@@ -34,7 +36,7 @@ julia> Supper = Symmetric(A)
  0  5  0  1  0
  3  0  8  0  4
 
-julia> Slower = Symmetric(A, :L)
+julia> Slower = Symmetric(A, LOWER)
 5×5 Symmetric{Int64,Array{Int64,2}}:
  1  0  6  0  2
  0  4  0  9  0
@@ -45,48 +47,48 @@ julia> Slower = Symmetric(A, :L)
 
 Note that `Supper` will not be equal to `Slower` unless `A` is itself symmetric (e.g. if `A == transpose(A)`).
 """
-function Symmetric(A::AbstractMatrix, uplo::Symbol=:U)
+Symmetric(A::AbstractMatrix, uplo::Symbol) = Symmetric(A, Val(uplo))
+function Symmetric(A::AbstractMatrix, uplo::Val=UPPER)
     checksquare(A)
-    return symmetric_type(typeof(A))(A, char_uplo(uplo))
+    return symmetric_type(typeof(A), uplo)(A)
 end
 
 """
-    symmetric(A, uplo=:U)
+    symmetric(A, uplo={UPPER|LOWER})
 
 Construct a symmetric view of `A`. If `A` is a matrix, `uplo` controls whether the upper
-(if `uplo = :U`) or lower (if `uplo = :L`) triangle of `A` is used to implicitly fill the
-other one. If `A` is a `Number`, it is returned as is.
+(if `uplo = UPPER`) or lower (if `uplo = LOWER`) triangle of `A` is used to implicitly
+fill the other one. If `A` is a `Number`, it is returned as is.
 
 If a symmetric view of a matrix is to be constructed of which the elements are neither
 matrices nor numbers, an appropriate method of `symmetric` has to be implemented. In that
 case, `symmetric_type` has to be implemented, too.
 """
-symmetric(A::AbstractMatrix, uplo::Symbol) = Symmetric(A, uplo)
-symmetric(A::Number, ::Symbol) = A
+symmetric(A::AbstractMatrix, uplo::Val=UPPER) = Symmetric(A, uplo)
+symmetric(A::Number, ::Val) = A
 
 """
-    symmetric_type(T::Type)
+    symmetric_type(T::Type, uplo)
 
-The type of the object returned by `symmetric(::T, ::Symbol)`. For matrices, this is an
+The type of the object returned by `symmetric(::T, ::Val)`. For matrices, this is an
 appropriately typed `Symmetric`, for `Number`s, it is the original type. If `symmetric` is
-implemented for a custom type, so should be `symmetric_type`, and vice versa.
+implemented for a custom type, so should be `symmetric_t ype`, and vice versa.
 """
-function symmetric_type(::Type{T}) where {S, T<:AbstractMatrix{S}}
-    return Symmetric{Union{S, promote_op(transpose, S), symmetric_type(S)}, T}
+function symmetric_type(::Type{T}, uplo::Val{U}) where {S, T<:AbstractMatrix{S},U}
+    return Symmetric{Union{S, promote_op(transpose, S), symmetric_type(S, uplo)}, T, U}
 end
-symmetric_type(::Type{T}) where {T<:Number} = T
+symmetric_type(::Type{T}, ::Val) where {T<:Number} = T
 
-struct Hermitian{T,S<:AbstractMatrix{<:T}} <: AbstractMatrix{T}
+struct Hermitian{T,S<:AbstractMatrix{<:T},U} <: AbstractMatrix{T}
     data::S
-    uplo::Char
 
-    function Hermitian{T,S}(data, uplo) where {T,S<:AbstractMatrix{<:T}}
+    function Hermitian{T,S,U}(data) where {T,S<:AbstractMatrix{<:T},U}
         @assert !has_offset_axes(data)
-        new{T,S}(data, uplo)
+        new{T,S,U}(data)
     end
 end
 """
-    Hermitian(A, uplo=:U)
+    Hermitian(A, uplo=UPPER)
 
 Construct a `Hermitian` view of the upper (if `uplo = :U`) or lower (if `uplo = :L`)
 triangle of the matrix `A`.
@@ -103,7 +105,7 @@ julia> Hupper = Hermitian(A)
  0+0im  5+0im  0+0im  1+0im  0+0im
  3+3im  0+0im  8-8im  0+0im  4+0im
 
-julia> Hlower = Hermitian(A, :L)
+julia> Hlower = Hermitian(A, LOWER)
 5×5 Hermitian{Complex{Int64},Array{Complex{Int64},2}}:
  1+0im  0+0im  6+6im  0+0im  2-2im
  0+0im  4+0im  0+0im  9+0im  0+0im
@@ -120,52 +122,53 @@ All non-real parts of the diagonal will be ignored.
 Hermitian(fill(complex(1,1), 1, 1)) == fill(1, 1, 1)
 ```
 """
-function Hermitian(A::AbstractMatrix, uplo::Symbol=:U)
+Hermitian(A::AbstractMatrix, uplo::Symbol) = Hermitian(A, Val(uplo))
+function Hermitian(A::AbstractMatrix, uplo::Val=UPPER)
     n = checksquare(A)
-    return hermitian_type(typeof(A))(A, char_uplo(uplo))
+    return hermitian_type(typeof(A), uplo)(A)
 end
 
 """
-    hermitian(A, uplo=:U)
+    hermitian(A, uplo={UPPER|LOWER})
 
 Construct a hermitian view of `A`. If `A` is a matrix, `uplo` controls whether the upper
-(if `uplo = :U`) or lower (if `uplo = :L`) triangle of `A` is used to implicitly fill the
-other one. If `A` is a `Number`, its real part is returned converted back to the input
+(if `uplo = UPPER`) or lower (if `uplo = LOWER`) triangle of `A` is used to implicitly fill
+the other one. If `A` is a `Number`, its real part is returned converted back to the input
 type.
 
 If a hermitian view of a matrix is to be constructed of which the elements are neither
 matrices nor numbers, an appropriate method of `hermitian` has to be implemented. In that
 case, `hermitian_type` has to be implemented, too.
 """
-hermitian(A::AbstractMatrix, uplo::Symbol) = Hermitian(A, uplo)
-hermitian(A::Number, ::Symbol) = convert(typeof(A), real(A))
+hermitian(A::AbstractMatrix, uplo::Val=UPPER) = Hermitian(A, uplo)
+hermitian(A::Number, ::Val) = convert(typeof(A), real(A))
 
 """
-    hermitian_type(T::Type)
+    hermitian_type(T::Type, uplo)
 
 The type of the object returned by `hermitian(::T, ::Symbol)`. For matrices, this is an
 appropriately typed `Hermitian`, for `Number`s, it is the original type. If `hermitian` is
 implemented for a custom type, so should be `hermitian_type`, and vice versa.
 """
-function hermitian_type(::Type{T}) where {S,T<:AbstractMatrix{S}}
-    return Hermitian{Union{S, promote_op(adjoint, S), hermitian_type(S)}, T}
+function hermitian_type(::Type{T}, uplo::Val{U}) where {S,T<:AbstractMatrix{S},U}
+    return Hermitian{Union{S, promote_op(adjoint, S), hermitian_type(S, uplo)}, T, U}
 end
-hermitian_type(::Type{T}) where {T<:Number} = T
+hermitian_type(::Type{T},::Val) where {T<:Number} = T
 
 for (S, H) in ((:Symmetric, :Hermitian), (:Hermitian, :Symmetric))
     @eval begin
         $S(A::$S) = A
-        function $S(A::$S, uplo::Symbol)
-            if A.uplo == char_uplo(uplo)
+        function $S(A::$S{<:Any,<:Any,U}, ::Val{V}) where {U,V}
+            if U == V
                 return A
             else
                 throw(ArgumentError("Cannot construct $($S); uplo doesn't match"))
             end
         end
-        $S(A::$H) = $S(A.data, sym_uplo(A.uplo))
-        function $S(A::$H, uplo::Symbol)
-            if A.uplo == char_uplo(uplo)
-                return $S(A.data, sym_uplo(A.uplo))
+        $S(A::$H{<:Any,<:Any,U}) where U = $S(A.data, U)
+        function $S(A::$H{<:Any,<:Any,U}, ::Val{V}) where {U,V}
+            if U == V
+                return $S(A.data, Val(U))
             else
                 throw(ArgumentError("Cannot construct $($S); uplo doesn't match"))
             end
@@ -176,27 +179,30 @@ end
 convert(T::Type{<:Symmetric}, m::Union{Symmetric,Hermitian}) = m isa T ? m : T(m)
 convert(T::Type{<:Hermitian}, m::Union{Symmetric,Hermitian}) = m isa T ? m : T(m)
 
-const HermOrSym{T,S} = Union{Hermitian{T,S}, Symmetric{T,S}}
-const RealHermSymComplexHerm{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Hermitian{Complex{T},S}}
-const RealHermSymComplexSym{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Symmetric{Complex{T},S}}
+const HermOrSym{T,S,U} = Union{Hermitian{T,S,U}, Symmetric{T,S,U}}
+const RealHermSymComplexHerm{T<:Real,S,U} = Union{Hermitian{T,S,U}, Symmetric{T,S,U}, Hermitian{Complex{T},S,U}}
+const RealHermSymComplexSym{T<:Real,S,U} = Union{Hermitian{T,S,U}, Symmetric{T,S,U}, Symmetric{Complex{T},S,U}}
+
+Base.getproperty(A::HermOrSym{<:Any,<:Any,U}, f::Symbol) where U = f == :uplo ? char_uplo(U) : getfield(A, f)
+Base.propertynames(A::HermOrSym) = (fieldnames(typeof(A))..., :uplo)
 
 size(A::HermOrSym, d) = size(A.data, d)
 size(A::HermOrSym) = size(A.data)
-@inline function getindex(A::Symmetric, i::Integer, j::Integer)
+@inline function getindex(A::Symmetric{<:Any,<:Any,U}, i::Integer, j::Integer) where U
     @boundscheck checkbounds(A, i, j)
     @inbounds if i == j
-        return symmetric(A.data[i, j], sym_uplo(A.uplo))::symmetric_type(eltype(A.data))
-    elseif (A.uplo == 'U') == (i < j)
+        return symmetric(A.data[i, j], Val(U))::symmetric_type(eltype(A.data), Val(U))
+    elseif (U == :U) == (i < j)
         return A.data[i, j]
     else
         return transpose(A.data[j, i])
     end
 end
-@inline function getindex(A::Hermitian, i::Integer, j::Integer)
+@inline function getindex(A::Hermitian{<:Any,<:Any,U}, i::Integer, j::Integer) where U
     @boundscheck checkbounds(A, i, j)
     @inbounds if i == j
-        return hermitian(A.data[i, j], sym_uplo(A.uplo))::hermitian_type(eltype(A.data))
-    elseif (A.uplo == 'U') == (i < j)
+        return hermitian(A.data[i, j], Val(U))::hermitian_type(eltype(A.data), Val(U))
+    elseif (U == :U) == (i < j)
         return A.data[i, j]
     else
         return adjoint(A.data[j, i])
@@ -220,95 +226,97 @@ end
 
 # For A<:Union{Symmetric,Hermitian}, similar(A[, neweltype]) should yield a matrix with the same
 # symmetry type, uplo flag, and underlying storage type as A. The following methods cover these cases.
-similar(A::Symmetric, ::Type{T}) where {T} = Symmetric(similar(parent(A), T), ifelse(A.uplo == 'U', :U, :L))
+similar(A::Symmetric{<:Any,<:Any,U}, ::Type{T}) where {T,U} = Symmetric(similar(parent(A), T), U)
 # If the the Hermitian constructor's check ascertaining that the wrapped matrix's
 # diagonal is strictly real is removed, the following method can be simplified.
-function similar(A::Hermitian, ::Type{T}) where T
+function similar(A::Hermitian{<:Any,<:Any,U}, ::Type{T}) where {T,U}
     B = similar(parent(A), T)
     for i in 1:size(B, 1) B[i, i] = 0 end
-    return Hermitian(B, ifelse(A.uplo == 'U', :U, :L))
+    return Hermitian(B, U)
 end
 # On the other hand, similar(A, [neweltype,] shape...) should yield a matrix of the underlying
 # storage type of A (not wrapped in a symmetry type). The following method covers these cases.
 similar(A::Union{Symmetric,Hermitian}, ::Type{T}, dims::Dims{N}) where {T,N} = similar(parent(A), T, dims)
 
 # Conversion
-function Matrix(A::Symmetric)
-    B = copytri!(convert(Matrix, copy(A.data)), A.uplo)
+function Matrix(A::Symmetric{<:Any,<:Any,U}) where U
+    B = copytri!(convert(Matrix, copy(A.data)), char_uplo(U))
     for i = 1:size(A, 1)
-        B[i,i] = symmetric(B[i,i], sym_uplo(A.uplo))::symmetric_type(eltype(A.data))
+        B[i,i] = symmetric(B[i,i], Val(U))::symmetric_type(eltype(A.data), Val(U))
     end
     return B
 end
-function Matrix(A::Hermitian)
-    B = copytri!(convert(Matrix, copy(A.data)), A.uplo, true)
+function Matrix(A::Hermitian{<:Any,<:Any,U}) where U
+    B = copytri!(convert(Matrix, copy(A.data)), char_uplo(U), true)
     for i = 1:size(A, 1)
-        B[i,i] = hermitian(B[i,i], sym_uplo(A.uplo))::hermitian_type(eltype(A.data))
+        B[i,i] = hermitian(B[i,i], Val(U))::hermitian_type(eltype(A.data), Val(U))
     end
     return B
 end
 Array(A::Union{Symmetric,Hermitian}) = convert(Matrix, A)
 
 parent(A::HermOrSym) = A.data
-Symmetric{T,S}(A::Symmetric{T,S}) where {T,S<:AbstractMatrix} = A
-Symmetric{T,S}(A::Symmetric) where {T,S<:AbstractMatrix} = Symmetric{T,S}(convert(S,A.data),A.uplo)
-AbstractMatrix{T}(A::Symmetric) where {T} = Symmetric(convert(AbstractMatrix{T}, A.data), sym_uplo(A.uplo))
+Symmetric{T,S,U}(A::Symmetric{T,S,U}) where {T,S<:AbstractMatrix{<:T},U} = A
+Symmetric{T,S}(A::Symmetric{<:Any,<:Any,U}) where {T,S<:AbstractMatrix,U} = Symmetric{T,S,U}(convert(S,A.data))
+AbstractMatrix{T}(A::Symmetric{<:Any,<:Any,U}) where {T,U} = Symmetric(convert(AbstractMatrix{T}, A.data), Val(U))
+Hermitian{T,S,U}(A::Hermitian{T,S,U}) where {T,S<:AbstractMatrix{<:T},U} = A
 Hermitian{T,S}(A::Hermitian{T,S}) where {T,S<:AbstractMatrix} = A
-Hermitian{T,S}(A::Hermitian) where {T,S<:AbstractMatrix} = Hermitian{T,S}(convert(S,A.data),A.uplo)
-AbstractMatrix{T}(A::Hermitian) where {T} = Hermitian(convert(AbstractMatrix{T}, A.data), sym_uplo(A.uplo))
+Hermitian{T,S}(A::Hermitian{<:Any,<:Any,U}) where {T,S<:AbstractMatrix,U} = Hermitian{T,S,U}(convert(S,A.data))
+AbstractMatrix{T}(A::Hermitian{<:Any,<:Any,U}) where {T,U} = Hermitian(convert(AbstractMatrix{T}, A.data), Val(U))
 
-copy(A::Symmetric{T,S}) where {T,S} = (B = copy(A.data); Symmetric{T,typeof(B)}(B,A.uplo))
-copy(A::Hermitian{T,S}) where {T,S} = (B = copy(A.data); Hermitian{T,typeof(B)}(B,A.uplo))
+copy(A::Symmetric{T,S,U}) where {T,S,U} = (B = copy(A.data); Symmetric{T,typeof(B),U}(B))
+copy(A::Hermitian{T,S,U}) where {T,S,U} = (B = copy(A.data); Hermitian{T,typeof(B),U}(B))
 
-function copyto!(dest::Symmetric, src::Symmetric)
-    if src.uplo == dest.uplo
+function copyto!(dest::Symmetric{<:Any,<:Any,U}, src::Symmetric{<:Any,<:Any,U}) where U
         copyto!(dest.data, src.data)
-    else
-        transpose!(dest.data, src.data)
-    end
+        return dest
+end
+function copyto!(dest::Symmetric{<:Any,<:Any,U}, src::Symmetric{<:Any,<:Any,V}) where {U,V}
+    transpose!(dest.data, src.data)
     return dest
 end
 
-function copyto!(dest::Hermitian, src::Hermitian)
-    if src.uplo == dest.uplo
+function copyto!(dest::Hermitian{<:Any,<:Any,U}, src::Hermitian{<:Any,<:Any,U}) where U
         copyto!(dest.data, src.data)
-    else
-        adjoint!(dest.data, src.data)
-    end
+        return dest
+end
+function copyto!(dest::Hermitian{<:Any,<:Any,U}, src::Hermitian{<:Any,<:Any,V}) where {U,V}
+    transpose!(dest.data, src.data)
     return dest
 end
 
 # fill[stored]!
 fill!(A::HermOrSym, x) = fillstored!(A, x)
-function fillstored!(A::HermOrSym{T}, x) where T
+function fillstored!(A::HermOrSym{T,<:Any,U}, x) where {T,U}
     xT = convert(T, x)
     if isa(A, Hermitian)
         isreal(xT) || throw(ArgumentError("cannot fill Hermitian matrix with a nonreal value"))
     end
-    if A.uplo == 'U'
+    if U == :U
         fillband!(A.data, xT, 0, size(A,2)-1)
-    else # A.uplo == 'L'
+    else # U == :L
         fillband!(A.data, xT, 1-size(A,1), 0)
     end
     return A
 end
 
-function Base.isreal(A::HermOrSym)
+function Base.isreal(A::HermOrSym{<:Any,<:Any,:U})
     n = size(A, 1)
-    @inbounds if A.uplo == 'U'
-        for j in 1:n
-            for i in 1:(j - (A isa Hermitian))
-                if !isreal(A.data[i,j])
-                    return false
-                end
+    @inbounds for j in 1:n
+        for i in 1:(j - (A isa Hermitian))
+            if !isreal(A.data[i,j])
+                return false
             end
         end
-    else
-        for j in 1:n
-            for i in (j + (A isa Hermitian)):n
-                if !isreal(A.data[i,j])
-                    return false
-                end
+    end
+    return true
+end
+function Base.isreal(A::HermOrSym{<:Any,<:Any,:L})
+    n = size(A, 1)
+    @inbounds for j in 1:n
+        for i in (j + (A isa Hermitian)):n
+            if !isreal(A.data[i,j])
+                return false
             end
         end
     end
@@ -331,88 +339,100 @@ transpose(A::Hermitian) = Transpose(A)
 
 Base.copy(A::Adjoint{<:Any,<:Hermitian}) = copy(A.parent)
 Base.copy(A::Transpose{<:Any,<:Symmetric}) = copy(A.parent)
-Base.copy(A::Adjoint{<:Any,<:Symmetric}) =
-    Symmetric(copy(adjoint(A.parent.data)), ifelse(A.parent.uplo == 'U', :L, :U))
-Base.collect(A::Transpose{<:Any,<:Hermitian}) =
-    Hermitian(copy(transpose(A.parent.data)), ifelse(A.parent.uplo == 'U', :L, :U))
+Base.copy(A::Adjoint{<:Any,<:Symmetric{<:Any,<:Any,U}}) where U =
+    Symmetric(copy(adjoint(A.parent.data)), U)
+Base.collect(A::Transpose{<:Any,<:Hermitian{<:Any,<:Any,U}}) where U =
+    Hermitian(copy(transpose(A.parent.data)), U)
 
 tr(A::Hermitian) = real(tr(A.data))
 
-Base.conj(A::HermOrSym) = typeof(A)(conj(A.data), A.uplo)
-Base.conj!(A::HermOrSym) = typeof(A)(conj!(A.data), A.uplo)
+Base.conj(A::HermOrSym) = typeof(A)(conj(A.data))
+Base.conj!(A::HermOrSym) = typeof(A)(conj!(A.data))
 
 # tril/triu
-function tril(A::Hermitian, k::Integer=0)
-    if A.uplo == 'U' && k <= 0
+function tril(A::Hermitian{<:Any,<:Any,:U}, k::Integer=0)
+    if k <= 0
         return tril!(copy(A.data'),k)
-    elseif A.uplo == 'U' && k > 0
+    else
         return tril!(copy(A.data'),-1) + tril!(triu(A.data),k)
-    elseif A.uplo == 'L' && k <= 0
+    end
+end
+function tril(A::Hermitian{<:Any,<:Any,:L}, k::Integer=0)
+    if k <= 0
         return tril(A.data,k)
     else
         return tril(A.data,-1) + tril!(triu!(copy(A.data')),k)
     end
 end
 
-function tril(A::Symmetric, k::Integer=0)
-    if A.uplo == 'U' && k <= 0
+function tril(A::Symmetric{<:Any,<:Any,:U}, k::Integer=0)
+    if k <= 0
         return tril!(copy(transpose(A.data)),k)
-    elseif A.uplo == 'U' && k > 0
+    else
         return tril!(copy(transpose(A.data)),-1) + tril!(triu(A.data),k)
-    elseif A.uplo == 'L' && k <= 0
+    end
+end
+function tril(A::Symmetric{<:Any,<:Any,:L}, k::Integer=0)
+    if k <= 0
         return tril(A.data,k)
     else
         return tril(A.data,-1) + tril!(triu!(copy(transpose(A.data))),k)
     end
 end
 
-function triu(A::Hermitian, k::Integer=0)
-    if A.uplo == 'U' && k >= 0
+function triu(A::Hermitian{<:Any,<:Any,:U}, k::Integer=0)
+    if k >= 0
         return triu(A.data,k)
-    elseif A.uplo == 'U' && k < 0
+    else
         return triu(A.data,1) + triu!(tril!(copy(A.data')),k)
-    elseif A.uplo == 'L' && k >= 0
+    end
+end
+function triu(A::Hermitian{<:Any,<:Any,:L}, k::Integer=0)
+    if k >= 0
         return triu!(copy(A.data'),k)
     else
         return triu!(copy(A.data'),1) + triu!(tril(A.data),k)
     end
 end
 
-function triu(A::Symmetric, k::Integer=0)
-    if A.uplo == 'U' && k >= 0
+function triu(A::Symmetric{<:Any,<:Any,:U}, k::Integer=0)
+    if k >= 0
         return triu(A.data,k)
-    elseif A.uplo == 'U' && k < 0
+    else
         return triu(A.data,1) + triu!(tril!(copy(transpose(A.data))),k)
-    elseif A.uplo == 'L' && k >= 0
+    end
+end
+function triu(A::Symmetric{<:Any,<:Any,:L}, k::Integer=0)
+    if k >= 0
         return triu!(copy(transpose(A.data)),k)
     else
         return triu!(copy(transpose(A.data)),1) + triu!(tril(A.data),k)
     end
 end
 
-(-)(A::Symmetric{Tv,S}) where {Tv,S} = Symmetric{Tv,S}(-A.data, A.uplo)
-(-)(A::Hermitian{Tv,S}) where {Tv,S} = Hermitian{Tv,S}(-A.data, A.uplo)
+(-)(A::Symmetric{Tv,S,U}) where {Tv,S,U} = Symmetric{Tv,S,U}(-A.data)
+(-)(A::Hermitian{Tv,S,U}) where {Tv,S,U} = Hermitian{Tv,S,U}(-A.data)
 
 ## Matvec
-mul!(y::StridedVector{T}, A::Symmetric{T,<:StridedMatrix}, x::StridedVector{T}) where {T<:BlasFloat} =
-    BLAS.symv!(A.uplo, one(T), A.data, x, zero(T), y)
-mul!(y::StridedVector{T}, A::Hermitian{T,<:StridedMatrix}, x::StridedVector{T}) where {T<:BlasReal} =
-    BLAS.symv!(A.uplo, one(T), A.data, x, zero(T), y)
-mul!(y::StridedVector{T}, A::Hermitian{T,<:StridedMatrix}, x::StridedVector{T}) where {T<:BlasComplex} =
-    BLAS.hemv!(A.uplo, one(T), A.data, x, zero(T), y)
+mul!(y::StridedVector{T}, A::Symmetric{T,<:StridedMatrix,U}, x::StridedVector{T}) where {T<:BlasFloat,U} =
+    BLAS.symv!(char_uplo(U), one(T), A.data, x, zero(T), y)
+mul!(y::StridedVector{T}, A::Hermitian{T,<:StridedMatrix,U}, x::StridedVector{T}) where {T<:BlasReal,U} =
+    BLAS.symv!(char_uplo(U), one(T), A.data, x, zero(T), y)
+mul!(y::StridedVector{T}, A::Hermitian{T,<:StridedMatrix,U}, x::StridedVector{T}) where {T<:BlasComplex,U} =
+    BLAS.hemv!(char_uplo(U), one(T), A.data, x, zero(T), y)
 ## Matmat
-mul!(C::StridedMatrix{T}, A::Symmetric{T,<:StridedMatrix}, B::StridedMatrix{T}) where {T<:BlasFloat} =
-    BLAS.symm!('L', A.uplo, one(T), A.data, B, zero(T), C)
-mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Symmetric{T,<:StridedMatrix}) where {T<:BlasFloat} =
-    BLAS.symm!('R', B.uplo, one(T), B.data, A, zero(T), C)
-mul!(C::StridedMatrix{T}, A::Hermitian{T,<:StridedMatrix}, B::StridedMatrix{T}) where {T<:BlasReal} =
-    BLAS.symm!('L', A.uplo, one(T), A.data, B, zero(T), C)
-mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Hermitian{T,<:StridedMatrix}) where {T<:BlasReal} =
-    BLAS.symm!('R', B.uplo, one(T), B.data, A, zero(T), C)
-mul!(C::StridedMatrix{T}, A::Hermitian{T,<:StridedMatrix}, B::StridedMatrix{T}) where {T<:BlasComplex} =
-    BLAS.hemm!('L', A.uplo, one(T), A.data, B, zero(T), C)
-mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Hermitian{T,<:StridedMatrix}) where {T<:BlasComplex} =
-    BLAS.hemm!('R', B.uplo, one(T), B.data, A, zero(T), C)
+mul!(C::StridedMatrix{T}, A::Symmetric{T,<:StridedMatrix,U}, B::StridedMatrix{T}) where {T<:BlasFloat,U} =
+    BLAS.symm!('L', char_uplo(U), one(T), A.data, B, zero(T), C)
+mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Symmetric{T,<:StridedMatrix,U}) where {T<:BlasFloat,U} =
+    BLAS.symm!('R', char_uplo(U), one(T), B.data, A, zero(T), C)
+mul!(C::StridedMatrix{T}, A::Hermitian{T,<:StridedMatrix,U}, B::StridedMatrix{T}) where {T<:BlasReal,U} =
+    BLAS.symm!('L', char_uplo(U), one(T), A.data, B, zero(T), C)
+mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Hermitian{T,<:StridedMatrix,U}) where {T<:BlasReal,U} =
+    BLAS.symm!('R', char_uplo(U), one(T), B.data, A, zero(T), C)
+mul!(C::StridedMatrix{T}, A::Hermitian{T,<:StridedMatrix,U}, B::StridedMatrix{T}) where {T<:BlasComplex,U} =
+    BLAS.hemm!('L', char_uplo(U), one(T), A.data, B, zero(T), C)
+mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Hermitian{T,<:StridedMatrix,U}) where {T<:BlasComplex,U} =
+    BLAS.hemm!('R', char_uplo(U), one(T), B.data, A, zero(T), C)
 
 *(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
 
@@ -441,12 +461,12 @@ mul!(C::StridedMatrix{T}, A::StridedMatrix{T}, B::Hermitian{T,<:StridedMatrix}) 
 *(A::AbstractTriangular, adjB::Adjoint{<:Any,<:RealHermSymComplexHerm}) = A * adjB.parent
 
 # Scaling with Number
-*(A::Symmetric, x::Number) = Symmetric(A.data*x, sym_uplo(A.uplo))
-*(x::Number, A::Symmetric) = Symmetric(x*A.data, sym_uplo(A.uplo))
-*(A::Hermitian, x::Real) = Hermitian(A.data*x, sym_uplo(A.uplo))
-*(x::Real, A::Hermitian) = Hermitian(x*A.data, sym_uplo(A.uplo))
-/(A::Symmetric, x::Number) = Symmetric(A.data/x, sym_uplo(A.uplo))
-/(A::Hermitian, x::Real) = Hermitian(A.data/x, sym_uplo(A.uplo))
+*(A::Symmetric{<:Any,<:Any,U}, x::Number) where U = Symmetric(A.data*x, U)
+*(x::Number, A::Symmetric{<:Any,<:Any,U}) where U = Symmetric(x*A.data, U)
+*(A::Hermitian{<:Any,<:Any,U}, x::Real) where U = Hermitian(A.data*x, U)
+*(x::Real, A::Hermitian{<:Any,<:Any,U}) where U = Hermitian(x*A.data, U)
+/(A::Symmetric{<:Any,<:Any,U}, x::Number) where U = Symmetric(A.data/x, U)
+/(A::Hermitian{<:Any,<:Any,U}, x::Real) where U= Hermitian(A.data/x, U)
 
 function factorize(A::HermOrSym{T}) where T
     TT = typeof(sqrt(oneunit(T)))
@@ -466,26 +486,27 @@ det(A::Symmetric) = det(factorize(A))
 # so using LU is faster for AbstractMatrix right hand side
 \(A::HermOrSym{<:Any,<:StridedMatrix}, B::AbstractMatrix) = \(lu(A), B)
 
-function _inv(A::HermOrSym)
+function _inv(A::HermOrSym{<:Any,<:Any,U}) where U
     n = checksquare(A)
     B = inv!(lu(A))
     conjugate = isa(A, Hermitian)
     # symmetrize
-    if A.uplo == 'U' # add to upper triangle
+    if U == :U # add to upper triangle
         @inbounds for i = 1:n, j = i:n
             B[i,j] = conjugate ? (B[i,j] + conj(B[j,i])) / 2 : (B[i,j] + B[j,i]) / 2
         end
-    else # A.uplo == 'L', add to lower triangle
+    else # U == :L, add to lower triangle
         @inbounds for i = 1:n, j = i:n
             B[j,i] = conjugate ? (B[j,i] + conj(B[i,j])) / 2 : (B[j,i] + B[i,j]) / 2
         end
     end
     B
 end
-inv(A::Hermitian{<:Any,<:StridedMatrix}) = Hermitian(_inv(A), sym_uplo(A.uplo))
-inv(A::Symmetric{<:Any,<:StridedMatrix}) = Symmetric(_inv(A), sym_uplo(A.uplo))
+inv(A::Hermitian{<:Any,<:StridedMatrix,U}) where U = Hermitian(_inv(A), U)
+inv(A::Symmetric{<:Any,<:StridedMatrix,U}) where U = Symmetric(_inv(A), U)
 
-eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}) = Eigen(LAPACK.syevr!('V', 'A', A.uplo, A.data, 0.0, 0.0, 0, 0, -1.0)...)
+eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix,U}) where U =
+    Eigen(LAPACK.syevr!('V', 'A', char_uplo(U), A.data, 0.0, 0.0, 0, 0, -1.0)...)
 
 function eigen(A::RealHermSymComplexHerm)
     T = eltype(A)
@@ -493,7 +514,8 @@ function eigen(A::RealHermSymComplexHerm)
     eigen!(S != T ? convert(AbstractMatrix{S}, A) : copy(A))
 end
 
-eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}, irange::UnitRange) = Eigen(LAPACK.syevr!('V', 'I', A.uplo, A.data, 0.0, 0.0, irange.start, irange.stop, -1.0)...)
+eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix,U}, irange::UnitRange) where U =
+    Eigen(LAPACK.syevr!('V', 'I', char_uplo(U), A.data, 0.0, 0.0, irange.start, irange.stop, -1.0)...)
 
 """
     eigen(A::Union{SymTridiagonal, Hermitian, Symmetric}, irange::UnitRange) -> Eigen
@@ -518,8 +540,8 @@ function eigen(A::RealHermSymComplexHerm, irange::UnitRange)
     eigen!(S != T ? convert(AbstractMatrix{S}, A) : copy(A), irange)
 end
 
-eigen!(A::RealHermSymComplexHerm{T,<:StridedMatrix}, vl::Real, vh::Real) where {T<:BlasReal} =
-    Eigen(LAPACK.syevr!('V', 'V', A.uplo, A.data, convert(T, vl), convert(T, vh), 0, 0, -1.0)...)
+eigen!(A::RealHermSymComplexHerm{T,<:StridedMatrix,U}, vl::Real, vh::Real) where {T<:BlasReal,U} =
+    Eigen(LAPACK.syevr!('V', 'V', char_uplo(U), A.data, convert(T, vl), convert(T, vh), 0, 0, -1.0)...)
 
 """
     eigen(A::Union{SymTridiagonal, Hermitian, Symmetric}, vl::Real, vu::Real) -> Eigen
@@ -544,8 +566,8 @@ function eigen(A::RealHermSymComplexHerm, vl::Real, vh::Real)
     eigen!(S != T ? convert(AbstractMatrix{S}, A) : copy(A), vl, vh)
 end
 
-eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}) =
-    LAPACK.syevr!('N', 'A', A.uplo, A.data, 0.0, 0.0, 0, 0, -1.0)[1]
+eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix,U}) where U =
+    LAPACK.syevr!('N', 'A', char_uplo(U), A.data, 0.0, 0.0, 0, 0, -1.0)[1]
 
 function eigvals(A::RealHermSymComplexHerm)
     T = eltype(A)
@@ -559,8 +581,8 @@ end
 Same as [`eigvals`](@ref), but saves space by overwriting the input `A`, instead of creating a copy.
 `irange` is a range of eigenvalue *indices* to search for - for instance, the 2nd to 8th eigenvalues.
 """
-eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}, irange::UnitRange) =
-    LAPACK.syevr!('N', 'I', A.uplo, A.data, 0.0, 0.0, irange.start, irange.stop, -1.0)[1]
+eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix,U}, irange::UnitRange) where U =
+    LAPACK.syevr!('N', 'I', char_uplo(U), A.data, 0.0, 0.0, irange.start, irange.stop, -1.0)[1]
 
 """
     eigvals(A::Union{SymTridiagonal, Hermitian, Symmetric}, irange::UnitRange) -> values
@@ -599,8 +621,8 @@ end
 Same as [`eigvals`](@ref), but saves space by overwriting the input `A`, instead of creating a copy.
 `vl` is the lower bound of the interval to search for eigenvalues, and `vu` is the upper bound.
 """
-eigvals!(A::RealHermSymComplexHerm{T,<:StridedMatrix}, vl::Real, vh::Real) where {T<:BlasReal} =
-    LAPACK.syevr!('N', 'V', A.uplo, A.data, convert(T, vl), convert(T, vh), 0, 0, -1.0)[1]
+eigvals!(A::RealHermSymComplexHerm{T,<:StridedMatrix,U}, vl::Real, vh::Real) where {T<:BlasReal,U} =
+    LAPACK.syevr!('N', 'V', char_uplo(U), A.data, convert(T, vl), convert(T, vh), 0, 0, -1.0)[1]
 
 """
     eigvals(A::Union{SymTridiagonal, Hermitian, Symmetric}, vl::Real, vu::Real) -> values
@@ -635,19 +657,31 @@ end
 eigmax(A::RealHermSymComplexHerm{<:Real,<:StridedMatrix}) = eigvals(A, size(A, 1):size(A, 1))[1]
 eigmin(A::RealHermSymComplexHerm{<:Real,<:StridedMatrix}) = eigvals(A, 1:1)[1]
 
-function eigen!(A::HermOrSym{T,S}, B::HermOrSym{T,S}) where {T<:BlasReal,S<:StridedMatrix}
-    vals, vecs, _ = LAPACK.sygvd!(1, 'V', A.uplo, A.data, B.uplo == A.uplo ? B.data : copy(B.data'))
+function eigen!(A::HermOrSym{T,S,U}, B::HermOrSym{T,S,U}) where {T<:BlasReal,S<:StridedMatrix,U}
+    vals, vecs, _ = LAPACK.sygvd!(1, 'V', char_uplo(U), A.data, B.data)
     GeneralizedEigen(vals, vecs)
 end
-function eigen!(A::Hermitian{T,S}, B::Hermitian{T,S}) where {T<:BlasComplex,S<:StridedMatrix}
-    vals, vecs, _ = LAPACK.sygvd!(1, 'V', A.uplo, A.data, B.uplo == A.uplo ? B.data : copy(B.data'))
+function eigen!(A::HermOrSym{T,S,U}, B::HermOrSym{T,S,V}) where {T<:BlasReal,S<:StridedMatrix,U,V}
+    vals, vecs, _ = LAPACK.sygvd!(1, 'V', char_uplo(U), A.data, copy(B.data'))
+    GeneralizedEigen(vals, vecs)
+end
+function eigen!(A::Hermitian{T,S,U}, B::Hermitian{T,S,U}) where {T<:BlasComplex,S<:StridedMatrix,U}
+    vals, vecs, _ = LAPACK.sygvd!(1, 'V', char_uplo(U), A.data, B.data)
+    GeneralizedEigen(vals, vecs)
+end
+function eigen!(A::Hermitian{T,S,U}, B::Hermitian{T,S,V}) where {T<:BlasComplex,S<:StridedMatrix,U,V}
+    vals, vecs, _ = LAPACK.sygvd!(1, 'V', char_uplo(U), A.data, copy(B.data'))
     GeneralizedEigen(vals, vecs)
 end
 
-eigvals!(A::HermOrSym{T,S}, B::HermOrSym{T,S}) where {T<:BlasReal,S<:StridedMatrix} =
-    LAPACK.sygvd!(1, 'N', A.uplo, A.data, B.uplo == A.uplo ? B.data : copy(B.data'))[1]
-eigvals!(A::Hermitian{T,S}, B::Hermitian{T,S}) where {T<:BlasComplex,S<:StridedMatrix} =
-    LAPACK.sygvd!(1, 'N', A.uplo, A.data, B.uplo == A.uplo ? B.data : copy(B.data'))[1]
+eigvals!(A::HermOrSym{T,S,U}, B::HermOrSym{T,S,U}) where {T<:BlasReal,S<:StridedMatrix,U} =
+    LAPACK.sygvd!(1, 'N', char_uplo(U), A.data, B.data)[1]
+eigvals!(A::HermOrSym{T,S,U}, B::HermOrSym{T,S,V}) where {T<:BlasReal,S<:StridedMatrix,U,V} =
+    LAPACK.sygvd!(1, 'N', char_uplo(U), A.data, copy(B.data'))[1]
+eigvals!(A::Hermitian{T,S,U}, B::Hermitian{T,S,U}) where {T<:BlasComplex,S<:StridedMatrix,U} =
+    LAPACK.sygvd!(1, 'N', char_uplo(U), A.data, B.data)[1]
+eigvals!(A::Hermitian{T,S,U}, B::Hermitian{T,S,V}) where {T<:BlasComplex,S<:StridedMatrix,U,V} =
+    LAPACK.sygvd!(1, 'N', char_uplo(U), A.data, copy(B.data'))[1]
 
 eigvecs(A::HermOrSym) = eigvecs(eigen(A))
 

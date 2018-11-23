@@ -930,18 +930,18 @@ function Sparse(A::SparseMatrixCSC{<:VTypes,<:ITypes})
 end
 Sparse(A::SparseMatrixCSC{Complex{Float32},<:ITypes}) =
     Sparse(SparseMatrixCSC{Complex{Float64},SuiteSparse_long}(A))
-Sparse(A::Symmetric{Float64,SparseMatrixCSC{Float64,SuiteSparse_long}}) =
-    Sparse(A.data, A.uplo == 'L' ? -1 : 1)
+Sparse(A::Symmetric{Float64,SparseMatrixCSC{Float64,SuiteSparse_long},U}) where U =
+    Sparse(A.data, U == :L ? -1 : 1)
 # The convert method for Hermitian is very similar to the general convert method, but we need to
 # remove any non real elements in the diagonal because, in contrast to BLAS/LAPACK these are not
 # ignored by CHOLMOD. If even tiny imaginary parts are present CHOLMOD will fail with a non-positive
 # definite/zero pivot error.
-function Sparse(AH::Hermitian{Tv,SparseMatrixCSC{Tv,SuiteSparse_long}}) where {Tv<:VTypes}
+function Sparse(AH::Hermitian{Tv,SparseMatrixCSC{Tv,SuiteSparse_long},U}) where {Tv<:VTypes,U}
     A = AH.data
 
     # Here we allocate a Symmetric/Hermitian CHOLMOD.Sparse matrix so we only need to copy
     # a single triangle of AH
-    o = allocate_sparse(A.m, A.n, length(A.nzval), true, true, AH.uplo == 'L' ? -1 : 1, Tv)
+    o = allocate_sparse(A.m, A.n, length(A.nzval), true, true, U == :L ? -1 : 1, Tv)
     s = unsafe_load(pointer(o))
     for i = 1:length(A.colptr)
         unsafe_store!(s.p, A.colptr[i] - 1, i)
