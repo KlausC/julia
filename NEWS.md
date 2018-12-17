@@ -121,6 +121,7 @@ Standard library changes
 
 #### SparseArrays
   * `sprandn` now supports specifying the output element type ([#30083]).
+  * `spmatmul` no longer has the obsolete optional keyword argument `sortindices` ([#30372]).
 
 #### Statistics
   * `mean` and `var` now handle more kinds of empty inputs ([#29033]).
