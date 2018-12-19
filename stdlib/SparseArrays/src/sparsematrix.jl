@@ -37,21 +37,19 @@ size(S::SparseMatrixCSC) = (S.m, S.n)
 
 # Define an alias for views of a SparseMatrixCSC which include all rows and a unit range of the columns.
 # Also define a union of SparseMatrixCSC and this view since many methods can be defined efficiently for
-# this union by extracting the fields via the get function: getcolptr, getrowval, and getnzval. The key
-# insight is that getcolptr on a SparseMatrixCSCView returns an offset view of the colptr of the
-# underlying SparseMatrixCSC
+# this union by extracting the fields via the get functions: nzrange, rowvals and nonzeros.
+# The key insight is that nzrange(A, j) on a SparseMatrixCSCView returns range of indices
+# in rowvals(A) of the underlying SparseMatrixCSC as it does for SparseMatrixCSC.
+
 const SparseMatrixCSCView{Tv,Ti} =
     SubArray{Tv,2,SparseMatrixCSC{Tv,Ti},
         Tuple{Base.Slice{Base.OneTo{Int}},I}} where {I<:AbstractUnitRange}
 const SparseMatrixCSCUnion{Tv,Ti} = Union{SparseMatrixCSC{Tv,Ti}, SparseMatrixCSCView{Tv,Ti}}
 
-getcolptr(S::SparseMatrixCSC)     = S.colptr
-getcolptr(S::SparseMatrixCSCView) = view(S.parent.colptr, first(axes(S, 2)):(last(axes(S, 2)) + 1))
-getrowval(S::SparseMatrixCSC)     = S.rowval
-getrowval(S::SparseMatrixCSCView) = S.parent.rowval
-getnzval( S::SparseMatrixCSC)     = S.nzval
-getnzval( S::SparseMatrixCSCView) = S.parent.nzval
+sparseaccess(A::SparseMatrixCSCUnion) = A # will be useful when extending SparseMatrixCSCView
+
 nzvalview(S::SparseMatrixCSC)     = view(S.nzval, 1:nnz(S))
+nzvalview(S::SparseMatrixCSCView) = view(S.parent.nzval, first(nzrange(S, first(axes(S, 2)))):last(nzrange(S, last(axes(S, 2)))))
 
 """
     nnz(A)
@@ -71,8 +69,10 @@ julia> nnz(A)
 ```
 """
 nnz(S::SparseMatrixCSC)         = Int(S.colptr[S.n + 1] - 1)
+nnz(S::SparseMatrixCSCView) = last(nzrange(parent(S), last(S.indices[2]))) - first(nzrange(S.parent, first(S.indices[2]))) + 1
 nnz(S::ReshapedArray{T,1,<:SparseMatrixCSC}) where T = nnz(parent(S))
-count(pred, S::SparseMatrixCSC) = count(pred, nzvalview(S)) + pred(zero(eltype(S)))*(prod(size(S)) - nnz(S))
+
+count(pred, S::SparseMatrixCSCView) = count(pred, nzvalview(S)) + pred(zero(eltype(S)))*(prod(size(S)) - nnz(S))
 
 """
     nonzeros(A)
@@ -99,6 +99,7 @@ julia> nonzeros(A)
 ```
 """
 nonzeros(S::SparseMatrixCSC) = S.nzval
+nonzeros(S::SparseMatrixCSCView) = nonzeros(parent(S))
 
 """
     rowvals(A::SparseMatrixCSC)
@@ -124,13 +125,16 @@ julia> rowvals(A)
 ```
 """
 rowvals(S::SparseMatrixCSC) = S.rowval
+rowvals(S::SparseMatrixCSCView) = S.parent.rowval
 
 """
     nzrange(A::SparseMatrixCSC, col::Integer)
+    nzrange(view(A,:,i:j), col::Integer)
 
 Return the range of indices to the structural nonzero values of a sparse matrix
 column. In conjunction with [`nonzeros`](@ref) and
-[`rowvals`](@ref), this allows for convenient iterating over a sparse matrix :
+[`rowvals`](@ref), this allows for convenient iterating over a sparse matrix or a
+view of a sparse matrix of the shown form:
 
     A = sparse(I,J,V)
     rows = rowvals(A)
@@ -145,6 +149,7 @@ column. In conjunction with [`nonzeros`](@ref) and
     end
 """
 nzrange(S::SparseMatrixCSC, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
+nzrange(S::SparseMatrixCSCView, col::Integer) = nzrange(S.parent, S.indices[2][col])
 
 function Base.show(io::IO, ::MIME"text/plain", S::SparseMatrixCSC)
     xnnz = nnz(S)

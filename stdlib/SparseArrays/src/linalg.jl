@@ -329,19 +329,17 @@ function _lmul!(U::UpperTriangularPlain, B::StridedVecOrMat)
     unit = U isa UnitDiagonalTriangular
 
     nrowB, ncolB  = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
 
     joff = 0
     for k = 1:ncolB
         for j = 1:nrowB
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
+            rA = nzrange(A, j)
             done = unit
 
             bj = B[joff + j]
-            for ii = i1:i2
+            for ii = rA
                 jai = ja[ii]
                 aii = aa[ii]
                 if jai < j
@@ -370,19 +368,15 @@ function _lmul!(L::LowerTriangularPlain, B::StridedVecOrMat)
     unit = L isa UnitDiagonalTriangular
 
     nrowB, ncolB = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
 
     joff = 0
     for k = 1:ncolB
         for j = nrowB:-1:1
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
             done = unit
-
             bj = B[joff + j]
-            for ii = i2:-1:i1
+            for ii = reverse(nzrange(A, j))
                 jai = ja[ii]
                 aii = aa[ii]
                 if jai > j
@@ -412,21 +406,18 @@ function _lmul!(U::UpperTriangularWrapped, B::StridedVecOrMat)
     adj = U isa Adjoint
 
     nrowB, ncolB  = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
     Z = zero(eltype(A))
 
     joff = 0
     for k = 1:ncolB
         for j = 1:nrowB
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
             akku = Z
             j0 = !unit ? j : j + 1
 
             # loop through column j of A - only structural non-zeros
-            for ii = i2:-1:i1
+            for ii = reverse(nzrange(A, j))
                 jai = ja[ii]
                 if jai >= j0
                     aai = possible_adjoint(adj, aa[ii])
@@ -452,21 +443,18 @@ function _lmul!(L::LowerTriangularWrapped, B::StridedVecOrMat)
     adj = L isa Adjoint
 
     nrowB, ncolB  = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
     Z = zero(eltype(A))
 
     joff = 0
     for k = 1:ncolB
         for j = nrowB:-1:1
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
             akku = Z
             j0 = !unit ? j : j - 1
 
             # loop through column j of A - only structural non-zeros
-            for ii = i1:i2
+            for ii = nzrange(A, j)
                 jai = ja[ii]
                 if jai <= j0
                     aai = possible_adjoint(adj, aa[ii])
@@ -502,16 +490,14 @@ function _ldiv!(L::LowerTriangularPlain, B::StridedVecOrMat)
     unit = L isa UnitDiagonalTriangular
 
     nrowB, ncolB  = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
 
     joff = 0
     for k = 1:ncolB
         for j = 1:nrowB
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
-
+            rB = nzrange(A, j)
+            i1, i2 = first(rB), last(rB)
             # find diagonal element
             ii = searchsortedfirst(ja, j, i1, i2, Base.Order.Forward)
             jai = ii > i2 ? zero(eltype(ja)) : ja[ii]
@@ -544,15 +530,14 @@ function _ldiv!(U::UpperTriangularPlain, B::StridedVecOrMat)
     unit = U isa UnitDiagonalTriangular
 
     nrowB, ncolB = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
 
     joff = 0
     for k = 1:ncolB
         for j = nrowB:-1:1
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
+            rB = nzrange(A, j)
+            i1, i2 = first(rB), last(rB)
 
             # find diagonal element
             ii = searchsortedlast(ja, j, i1, i2, Base.Order.Forward)
@@ -587,20 +572,17 @@ function _ldiv!(L::LowerTriangularWrapped, B::StridedVecOrMat)
     adj = L isa Adjoint
 
     nrowB, ncolB  = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
 
     joff = 0
     for k = 1:ncolB
         for j = 1:nrowB
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
             akku = B[joff + j]
             done = false
 
             # loop through column j of A - only structural non-zeros
-            for ii = i1:i2
+            for ii = nzrange(A, j)
                 jai = ja[ii]
                 if jai < j
                     aai = possible_adjoint(adj, aa[ii])
@@ -633,20 +615,17 @@ function _ldiv!(U::UpperTriangularWrapped, B::StridedVecOrMat)
     adj = U isa Adjoint
 
     nrowB, ncolB = size(B, 1), size(B, 2)
-    aa = getnzval(A)
-    ja = getrowval(A)
-    ia = getcolptr(A)
+    aa = nonzeros(A)
+    ja = rowvals(A)
 
     joff = 0
     for k = 1:ncolB
         for j = nrowB:-1:1
-            i1 = ia[j]
-            i2 = ia[j + 1] - 1
             akku = B[joff + j]
             done = false
 
             # loop through column j of A - only structural non-zeros
-            for ii = i2:-1:i1
+            for ii = reverse(nzrange(A, j))
                 jai = ja[ii]
                 if jai > j
                     aai = possible_adjoint(adj, aa[ii])

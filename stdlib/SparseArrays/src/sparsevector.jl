@@ -58,6 +58,13 @@ function nonzeroinds(x::SparseColumnView)
     return y
 end
 
+nzrange(x::SparseVector) = axes(x)
+function nzrange(x::SparseColumnView)
+    rowidx, colidx = parentindices(x)
+    nzrange(parent(x), colidx)
+end
+rowvals(x::SparseVector) = x.nzind
+rowvals(x::SparseColumnView) = parent(x).nzind
 
 ## similar
 #
