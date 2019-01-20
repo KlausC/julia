@@ -48,7 +48,10 @@ const SparseMatrixCSCView{Tv,Ti} =
         Tuple{Base.Slice{Base.OneTo{Int}},I}} where {I<:AbstractUnitRange}
 const SparseMatrixCSCUnion{Tv,Ti} = Union{SparseMatrixCSC{Tv,Ti}, SparseMatrixCSCView{Tv,Ti}}
 
-sparseaccess(A::SparseMatrixCSCUnion) = A # will be useful when extending SparseMatrixCSCView
+const SparseMatrixCSCInterface{Tv,Ti} =
+    Union{SubArray{Tv,2,SparseMatrixCSC{Tv,Ti},<:Tuple{<:AbstractUnitRange{<:Integer},<:AbstractVector{<:Integer}},false}, SparseMatrixCSCUnion{Tv,Ti}}
+
+sparseaccess(A::SparseMatrixCSCInterface) = A
 
 nzvalview(S::SparseMatrixCSC)     = view(S.nzval, 1:nnz(S))
 nzvalview(S::SparseMatrixCSCView) = view(S.parent.nzval, first(nzrange(S, first(axes(S, 2)))):last(nzrange(S, last(axes(S, 2)))))
@@ -70,8 +73,9 @@ julia> nnz(A)
 3
 ```
 """
-nnz(S::SparseMatrixCSC)         = Int(S.colptr[S.n + 1] - 1)
-nnz(S::SparseMatrixCSCView) = last(nzrange(parent(S), last(S.indices[2]))) - first(nzrange(S.parent, first(S.indices[2]))) + 1
+nnz(S::SparseMatrixCSC)         = Int(S.colptr[S.n+1] - 1)
+nnz(S::SparseMatrixCSCView) = length(S) == 0 ? 0 : last(nzrange(parent(S), last(S.indices[2]))) - first(nzrange(S.parent, first(S.indices[2]))) + 1
+nnz(S::SparseMatrixCSCInterface) = sum(length.(nzrange.(Ref(S), axes(S, 2))))
 nnz(S::ReshapedArray{T,1,<:SparseMatrixCSC}) where T = nnz(parent(S))
 
 count(pred, S::SparseMatrixCSCView) = count(pred, nzvalview(S)) + pred(zero(eltype(S)))*(prod(size(S)) - nnz(S))
@@ -101,7 +105,7 @@ julia> nonzeros(A)
 ```
 """
 nonzeros(S::SparseMatrixCSC) = S.nzval
-nonzeros(S::SparseMatrixCSCView) = nonzeros(parent(S))
+nonzeros(S::SubArray{<:Any,2,<:SparseMatrixCSC}) = nonzeros(parent(S))
 
 """
     rowvals(A::SparseMatrixCSC)
@@ -129,6 +133,42 @@ julia> rowvals(A)
 rowvals(S::SparseMatrixCSC) = S.rowval
 rowvals(S::SparseMatrixCSCView) = rowvals(S.parent)
 
+struct RowIndexVector{U,T} <: AbstractVector{Int}
+    rvp::T
+    ind::U
+end
+
+function rowvals(S::SubArray{<:Any,2,<:Any,<:Tuple{<:Base.Slice,<:AbstractVector},false})
+    rowvals(S.parent)
+end
+function rowvals(S::SubArray{<:Any,2,<:Any,<:Tuple{<:UnitRange,<:AbstractVector},false})
+    RowIndexVector(rowvals(S.parent), S.indices[1])
+end
+function rowvals(S::SubArray{<:Any,2,<:Any,<:Tuple{<:OrdinalRange,<:AbstractVector},false})
+    RowIndexVector(rowvals(S.parent), S.indices[1])
+end
+
+import Base: getindex, size
+size(rv::RowIndexVector) = size(rv.rvp)
+
+function getindex(rv::RowIndexVector{<:UnitRange}, k::Integer)
+    i = rv.rvp[k]
+    ind = rv.ind
+    a = first(ind)
+    b = last(ind)
+    ( a <= i <= b ) ? ( i - a + 1 ) : 0
+end
+function getindex(rv::RowIndexVector{<:StepRange}, k::Integer)
+    i = rv.rvp[k]
+    ind = rv.ind
+    a = first(ind)
+    b = last(ind)
+    a <= i <= b || return 0
+    s = step(ind)
+    i -= a
+    rem(i, s) == 0 ? 0 : div(i, s)
+end
+
 """
     nzrange(A::SparseMatrixCSC, col::Integer)
     nzrange(view(A,:,i:j), col::Integer)
@@ -152,6 +192,24 @@ view of a sparse matrix of the shown form:
 """
 nzrange(S::SparseMatrixCSC, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
 nzrange(S::SparseMatrixCSCView, col::Integer) = nzrange(S.parent, S.indices[2][col])
+function nzrange(S::SparseMatrixCSCInterface, i::Integer)
+    A = S.parent
+    r = nzrange(A, S.indices[2][i])
+    rvA = rowvals(A)
+    m = axes(A, 1)
+    r1 = first(r)
+    r2 = last(r)
+    ri = S.indices[1]
+    i1 = first(ri)
+    i2 = last(ri)
+    if i1 > first(m)
+        r1 = searchsortedfirst(rvA, i1, r1, r2, Forward)
+    end
+    if i2 < last(m)
+        r2 = searchsortedlast(rvA, i2, r1, r2, Forward)
+    end
+    r1:r2
+end
 
 function Base.show(io::IO, ::MIME"text/plain", S::SparseMatrixCSC)
     xnnz = nnz(S)
