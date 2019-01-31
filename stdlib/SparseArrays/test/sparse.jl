@@ -2511,4 +2511,102 @@ end
     end
 end
 
+import SparseArrays: rowvalview, nzvalview
+
+@testset "nzrange etc" begin
+    rng = MersenneTwister(20190131)
+    A = sparse([1 2 0 4; 5 6 0 8; 0 0 0 0; 0 0 1 7; 1 0 1 0 ])
+
+    for (X, rvv, nzvv) in [
+        (A, [1,2,5,1,2,4,5,1,2,4], [1,5,1,2,6,1,1,4,8,7]),
+        (view(A, :, 2:3), [1,2,4,5], [2,6,1,1] ),
+        (view(A, 2:4, [4,3,1]), [1,3,3,1], [8,7,1,5]) ]
+
+        @test rowvalview(X) == rvv
+        @test nzvalview(X) == nzvv
+        @test nonzeros(X) == A.nzval
+    end
+    n = 1000
+    n1, n2 = 101, 900
+    B = []
+    A = sprand(rng, n, n, 100/n^2)
+    push!(B, A)
+    push!(B, view(A, :, n1:n2))         # SparseMatrixCSCView
+    push!(B, view(A, 1:n, n1:n2))       # SparseMatrixCSCInterface \ SparseMatrixCSCView
+    push!(B, view(A, 1:n, n2:-1:n1))    # SparseMatrixCSCInterface \ SparseMatrixCSCView
+    push!(B, view(A, n2:-1:n1, n1:n2))  # SparseMatrixCSCViewAll \ SparseMatricCSCInterface
+    N = axes(B, 1)
+
+    @testset "sparseviews identities A[$i]" for i in N
+        X = B[i]; Y = sparse(X); Z = Matrix(X)
+        @test X == Y
+        @test X == Z
+    end
+
+    x_findall(x) = findall(Base.Fix2(isless, 0.0), x)
+    x_ftranspos(x) = SparseArrays.ftranspose(x, transpose)
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (nnz, findnz, x_ftranspos, Matrix )
+        X = B[i]
+        @test f(X) == f(sparse(X))
+    end
+
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (x_findall, iszero, isone)
+        X = B[i]
+        @test f(X) == f(sparse(X))
+        @test f(X) == f(Matrix(X))
+    end
+
+    @testset "sparseviews mapreduce of view A[$i]" for i in N
+        X = B[i]
+        @test mapreduce(floor, +, X, dims=2) == mapreduce(floor, +, Matrix(X), dims=2)
+    end
+
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (hcat, vcat)
+        X = B[i]
+        @test f(X, X) == f(Matrix(X), Matrix(X))
+    end
+
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (blockdiag,)
+        X = B[i]
+        @test f(X, X) == f(copy(X), copy(X))
+    end
+
+    AS = A + A'
+    AS = [AS AS]
+    B = []
+    push!(B, AS)
+    push!(B, view(AS, :, 1:n))
+    push!(B, view(AS, n1:n2, n1:n2))
+    push!(B, view(AS, n2:-1:n1, n2:-1:n1))
+    N = axes(B, 1)
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (issymmetric, ishermitian)
+        X = B[i]
+        @test f(X) === f(Matrix(X))
+    end
+
+    AS = triu(A)
+    B = []
+    push!(B, AS)
+    push!(B, view(AS, :, 1:n))
+    push!(B, view(AS, n1:n2, n1:n2))
+    push!(B, view(AS, n2:-1:n1, n2:-1:n1))
+    N = axes(B, 1)
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (istriu,)
+        X = B[i]
+        @test f(X) == f(Matrix(X))
+    end
+
+    AS = tril(A)
+    B = []
+    push!(B, AS)
+    push!(B, view(AS, :, 1:n))
+    push!(B, view(AS, n1:n2, n1:n2))
+    push!(B, view(AS, n2:-1:n1, n2:-1:n1))
+    N = axes(B, 1)
+    @testset "sparseviews $f of view A[$i]" for i in N, f in (istril,)
+        X = B[i]
+        @test f(X) == f(Matrix(X))
+    end
+end
+
 end # module
