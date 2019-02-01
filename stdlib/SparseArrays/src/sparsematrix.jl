@@ -338,11 +338,8 @@ Base.dataids(S::SparseMatrixCSC) = (dataids(S.colptr)..., dataids(S.rowval)..., 
 Base.unaliascopy(S::SparseMatrixCSC) = typeof(S)(S.m, S.n, unaliascopy(S.colptr), unaliascopy(S.rowval), unaliascopy(S.nzval))
 
 ## Constructors
-
 copy(S::SparseMatrixCSC) =
     SparseMatrixCSC(S.m, S.n, copy(S.colptr), copy(S.rowval), copy(S.nzval))
-
-copy(A::SparseMatrixCSCViewAll) = getindex(parent(A), A.indices...)
 
 copyto!(A::SparseMatrixCSC, B::SparseMatrixCSCViewAll) = copyto!(A, copy(B))
 function copyto!(A::SparseMatrixCSC, B::SparseMatrixCSC)
@@ -1352,10 +1349,11 @@ dropzeros(A::SparseMatrixCSC; trim::Bool = true) = dropzeros!(copy(A), trim = tr
 
 ## Find methods
 
-function findall(S::SparseMatrixCSCInterface)
+function findall(S::SparseMatrixCSCViewAll)
     return findall(identity, S)
 end
 
+findall(p::Function, S::SparseMatrixCSCViewAll) = findall(p, sparseinter(S))
 function findall(p::Function, S::SparseMatrixCSCInterface)
     if p(zero(eltype(S)))
         return invoke(findall, Tuple{Function, Any}, p, S)
@@ -3077,6 +3075,7 @@ dropstored!(A::SparseMatrixCSC, ::Colon) = dropstored!(A, :, :)
 
 vcat(X::SparseMatrixCSC...) = _vcat(X...)
 vcat(X::SparseMatrixCSCInterface...) = _vcat(X...)
+vcat(X::Union{SparseMatrixCSCViewAll,AbstractSparseVector}...) = _vcat(sparseinter.(X)...)
 function _vcat(X::SparseMatrixCSCInterface...)
     num = length(X)
     mX = Int[ size(x, 1) for x in X ]
@@ -3119,6 +3118,10 @@ function _vcat(X::SparseMatrixCSCInterface...)
     SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
+sparseinter(A::SparseMatrixCSCInterface) = A
+sparseinter(A::SparseMatrixCSCViewAll) = copy(A)
+sparseinter(A::AbstractSparseVector) = SparseMatrixCSC(reshape(A, size(A, 1), size(A, 2)))
+
 @inline function stuffcol!(Xi::SparseMatrixCSCInterface, colptr, rowval, nzval,
                            ptr_res, ptr_Xi, col_length, mX_sofar)
     rowvalXi = rowvals(Xi)
@@ -3131,9 +3134,10 @@ end
     end
 end
 
-hcat(X::SparseMatrixCSC...) = _hcat(0, X...)
-hcat(X::SparseMatrixCSCViewAll...) = _hcat(0, X...)
-function _hcat(row_sofar::Int, X::SparseMatrixCSCViewAll...)
+hcat(X::SparseMatrixCSC...) = _hcat(X...)
+hcat(X::SparseMatrixCSCInterface...) = _hcat(X...)
+hcat(X::Union{SparseMatrixCSCViewAll,AbstractSparseVector}...) = _hcat(sparseinter.(X)...)
+function _hcat(X::SparseMatrixCSCInterface...)
     num = length(X)
     mX = Int[ size(x, 1) for x in X ]
     nX = Int[ size(x, 2) for x in X ]
@@ -3162,15 +3166,12 @@ function _hcat(row_sofar::Int, X::SparseMatrixCSCViewAll...)
     SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
-sparsematrix(A::AbstractArray) = SparseMatrixCSC(reshape(A, size(A, 1), size(A, 2)))
-sparsematrix(A::AbstractMatrix) = SparseMatrixCSC(A)
-
-function stuffmatrix!(XI::AbstractArray,
+#=function stuffmatrix!(XI::SparseMatrixCSCViewAll,
                       colptr::Vector{Ti}, rowval::Vector{Ti}, nzval::Vector{Tv},
                       nXI::Int, nX_sofar::Int, nnz_sofar::Int, mX_sofar::Int) where {Tv,Ti}
 
-    stuffmatrix!(sparsematrix(XI), colptr, rowval, nzval, nXI, nX_sofar, nnz_sofar, mX_sofar)
-end
+    stuffmatrix!(sparseinter(XI), colptr, rowval, nzval, nXI, nX_sofar, nnz_sofar, mX_sofar)
+end=#
 function stuffmatrix!(XI::SparseMatrixCSCInterface,
                       colptr::Vector{Ti}, rowval::Vector{Ti}, nzval::Vector{Tv},
                       nXI::Int, nX_sofar::Int, nnz_sofar::Int, mX_sofar::Int) where {Tv,Ti}
@@ -3205,7 +3206,9 @@ julia> blockdiag(sparse(2I, 3, 3), sparse(4I, 2, 2))
   [5, 5]  =  4
 ```
 """
-function blockdiag(X::AbstractArray...)
+function blockdiag end
+blockdiag(X::Union{SparseMatrixCSCViewAll,AbstractSparseVector}...) = _blockdiag(sparseinter.(X)...)
+function _blockdiag(X::SparseMatrixCSCInterface...)
     num = length(X)
     mX = Int[ size(x, 1) for x in X ]
     nX = Int[ size(x, 2) for x in X ]
