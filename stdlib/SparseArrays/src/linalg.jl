@@ -111,11 +111,11 @@ end
 
 # For compatibility with dense multiplication API. Should be deleted when dense multiplication
 # API is updated to follow BLAS API.
-mul!(C::StridedVecOrMat, A::SparseMatrixCSC, B::StridedVecOrMat) =
+mul!(C::StridedVecOrMat, A::SparseMatrixCSCInterface, B::StridedVecOrMat) =
     mul!(C, A, B, one(eltype(B)), zero(eltype(C)))
-mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:SparseMatrixCSC}, B::StridedVecOrMat) =
+mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:SparseMatrixCSCInterface}, B::StridedVecOrMat) =
     (A = adjA.parent; mul!(C, adjoint(A), B, one(eltype(B)), zero(eltype(C))))
-mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:SparseMatrixCSC}, B::StridedVecOrMat) =
+mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:SparseMatrixCSCInterface}, B::StridedVecOrMat) =
     (A = transA.parent; mul!(C, transpose(A), B, one(eltype(B)), zero(eltype(C))))
 
 function (*)(X::StridedMatrix{TX}, A::SparseMatrixCSCInterface{TvA,TiA}) where {TX,TvA,TiA}

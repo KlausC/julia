@@ -3244,31 +3244,41 @@ promote_indextype(v1, vs...) = promote_type(indextype(v1), promote_indextype(vs.
 
 ## Structure query functions
 issymmetric(A::SparseMatrixCSC) = is_hermsym(A, identity)
-issymmetric(A::SparseMatrixCSCViewAll) = is_hermsym(copy(A), identity)
+issymmetric(A::SubArray{<:Any,2,<:SparseMatrixCSC}) = is_hermsym(A, identity)
 
 ishermitian(A::SparseMatrixCSC) = is_hermsym(A, conj)
-ishermitian(A::SparseMatrixCSCViewAll) = is_hermsym(copy(A), conj)
+ishermitian(A::SubArray{<:Any,2,<:SparseMatrixCSC}) = is_hermsym(A, conj)
 
-function is_hermsym(A::SparseMatrixCSC, check::Function)
+is_hermsym(A::Number, check::Function) = A == check(A)
+is_hermsym(A::SubArray{<:Any,2,<:SparseMatrixCSC}) = is_hermsym(copy(A), check)
+function is_hermsym(A::SubArray{<:Any,2,<:SparseMatrixCSC,<:Tuple{<:StepRange{<:Integer,<:Integer},<:AbstractVector{<:Integer}},false}, check::Function)
+
+    st = step(A.indices[1])
+    if st == 1 || st == -1
+        ind = st == 1 ? (first(A.indices[1]):last(A.indices[1]), A.indices[2]) :
+                        (last(A.indices[1]):first(A.indices[1]), reverse(A.indices[2]))
+        is_hermsym(view(parent(A), ind...), check)
+    else
+        is_hermsym(copy(A), check)
+    end
+end
+function is_hermsym(A::SparseMatrixCSCInterface, check::Function)
     m, n = size(A)
     if m != n; return false; end
 
     rowval = rowvals(A)
     nzval = nonzeros(A)
-    tracker = copy(A.colptr)
+    tracker, stop = tracker_stop(A)
     for col = 1:n
         # `tracker` is updated such that, for symmetric matrices,
         # the loop below starts from an element at or below the
         # diagonal element of column `col`"
-        nzr = nzrange(A, col)
-        r1 = Int(first(nzr))
-        r2 = Int(last(nzr))
-        for p = tracker[col]:r2
+        for p = tracker[col]:stop[col+1]-1
             val = nzval[p]
             row = rowval[p]
 
             # Ignore stored zeros
-            if val == 0
+            if iszero(val)
                 continue
             end
 
@@ -3281,7 +3291,7 @@ function is_hermsym(A::SparseMatrixCSC, check::Function)
 
             # Diagonal element
             if row == col
-                if val != check(val)
+                if !is_hermsym(val, check)
                     return false
                 end
             else
@@ -3300,7 +3310,7 @@ function is_hermsym(A::SparseMatrixCSC, check::Function)
                 # We therefore "catch up" here while making sure that
                 # the elements are actually zero.
                 while row2 < col
-                    if nzval[offset] != 0
+                    if !iszero(nzval[offset])
                         return false
                     end
                     offset += 1
@@ -3324,6 +3334,22 @@ function is_hermsym(A::SparseMatrixCSC, check::Function)
         end
     end
     return true
+end
+
+function tracker_stop(A::SparseMatrixCSC)
+    copy(A.colptr), A.colptr
+end
+function tracker_stop(A::SparseMatrixCSCInterface{Tv,Ti}) where {Tv,Ti}
+    n = size(A, 2)
+    stop = Vector{Ti}(undef, n+1)
+    stop[1] = 1
+    tracker = Vector{Ti}(undef, n)
+    for col = 1:n
+        nzr = nzrange(A, col)
+        tracker[col] = first(nzr)
+        stop[col+1] = last(nzr) + 1
+    end
+    tracker, stop
 end
 
 function istriu(A::SparseMatrixCSCInterface)
