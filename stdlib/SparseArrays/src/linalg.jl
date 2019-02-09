@@ -30,6 +30,9 @@ end
 
 # In matrix-vector multiplication, the correct orientation of the vector is assumed.
 
+function mul!(C::StridedVecOrMat, A::SparseMatrixCSCFallback, B::StridedVecOrMat, α::Number, β::Number)
+    mul!(C, copy(A), B, α, β)
+end
 function mul!(C::StridedVecOrMat, A::SparseMatrixCSCInterface, B::StridedVecOrMat, α::Number, β::Number)
     m, n = size(A)
     n == size(B, 1) || throw(DimensionMismatch())
@@ -111,13 +114,14 @@ end
 
 # For compatibility with dense multiplication API. Should be deleted when dense multiplication
 # API is updated to follow BLAS API.
-mul!(C::StridedVecOrMat, A::SparseMatrixCSCInterface, B::StridedVecOrMat) =
+mul!(C::StridedVecOrMat, A::SparseMatrixCSCFallback, B::StridedVecOrMat) =
     mul!(C, A, B, one(eltype(B)), zero(eltype(C)))
-mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:SparseMatrixCSCInterface}, B::StridedVecOrMat) =
+mul!(C::StridedVecOrMat, adjA::Adjoint{<:Any,<:SparseMatrixCSCFallback}, B::StridedVecOrMat) =
     (A = adjA.parent; mul!(C, adjoint(A), B, one(eltype(B)), zero(eltype(C))))
-mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:SparseMatrixCSCInterface}, B::StridedVecOrMat) =
+mul!(C::StridedVecOrMat, transA::Transpose{<:Any,<:SparseMatrixCSCFallback}, B::StridedVecOrMat) =
     (A = transA.parent; mul!(C, transpose(A), B, one(eltype(B)), zero(eltype(C))))
 
+(*)(X::StridedMatrix, A::SparseMatrixCSCFallback) = X * copy(A)
 function (*)(X::StridedMatrix{TX}, A::SparseMatrixCSCInterface{TvA,TiA}) where {TX,TvA,TiA}
     mX, nX = size(X)
     m, n = size(A)
@@ -756,7 +760,7 @@ rdiv!(A::SparseMatrixCSC{T}, adjD::Adjoint{<:Any,<:Diagonal{T}}) where {T} =
 rdiv!(A::SparseMatrixCSC{T}, transD::Transpose{<:Any,<:Diagonal{T}}) where {T} =
     (D = transD.parent; rdiv!(A, D))
 
-function ldiv!(D::Diagonal{T}, A::SparseMatrixCSCInterface{T}) where {T}
+function ldiv!(D::Diagonal{T}, A::SparseMatrixCSC{T}) where {T}
     # require_one_based_indexing(A)
     m, n = size(A)
     if m != length(D.diag)
@@ -773,9 +777,9 @@ function ldiv!(D::Diagonal{T}, A::SparseMatrixCSCInterface{T}) where {T}
     end
     A
 end
-ldiv!(adjD::Adjoint{<:Any,<:Diagonal{T}}, A::SparseMatrixCSCInterface{T}) where {T} =
+ldiv!(adjD::Adjoint{<:Any,<:Diagonal{T}}, A::SparseMatrixCSC{T}) where {T} =
     (D = adjD.parent; ldiv!(conj(D), A))
-ldiv!(transD::Transpose{<:Any,<:Diagonal{T}}, A::SparseMatrixCSCInterface{T}) where {T} =
+ldiv!(transD::Transpose{<:Any,<:Diagonal{T}}, A::SparseMatrixCSC{T}) where {T} =
     (D = transD.parent; ldiv!(D, A))
 
 ## triu, tril
@@ -1270,7 +1274,7 @@ kron(A::SparseVectorUnion, B::AdjOrTransSparseVectorUnion) = A .* B
 
 ## det, inv, cond
 
-inv(A::SparseMatrixCSCViewAll) = error("The inverse of a sparse matrix can often be dense and can cause the computer to run out of memory. If you are sure you have enough memory, please convert your matrix to a dense matrix.")
+inv(A::SparseMatrixCSCFallback) = error("The inverse of a sparse matrix can often be dense and can cause the computer to run out of memory. If you are sure you have enough memory, please convert your matrix to a dense matrix.")
 
 # TODO
 

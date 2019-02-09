@@ -48,7 +48,7 @@ const SparseMatrixCSCView{Tv,Ti} =
         Tuple{Base.Slice{Base.OneTo{Int}},I}} where {I<:AbstractUnitRange}
 const SparseMatrixCSCUnion{Tv,Ti} = Union{SparseMatrixCSC{Tv,Ti}, SparseMatrixCSCView{Tv,Ti}}
 
-const SparseMatrixCSCViewAll{Tv,Ti} =
+const SparseMatrixCSCFallback{Tv,Ti} =
     Union{SparseMatrixCSC{Tv,Ti}, SubArray{Tv,2,<:SparseMatrixCSC{Tv,Ti}}}
 
 const SparseMatrixCSCInterface{Tv,Ti} =
@@ -82,7 +82,7 @@ julia> nnz(A)
 nnz(S::SparseMatrixCSC)         = Int(S.colptr[S.n+1] - 1)
 nnz(S::SparseMatrixCSCView) = length(S) == 0 ? 0 : last(nzrange(parent(S), last(S.indices[2]))) - first(nzrange(S.parent, first(S.indices[2]))) + 1
 nnz(S::SparseMatrixCSCInterface) = sum(length.(nzrange.(Ref(S), axes(S, 2))))
-nnz(S::SparseMatrixCSCViewAll) = nnz(copy(S))
+nnz(S::SparseMatrixCSCFallback) = nnz(copy(S))
 nnz(S::ReshapedArray{T,1,<:SparseMatrixCSC}) where T = nnz(parent(S))
 nnz(S::AbstractArray) = count(!iszero, S)
 
@@ -341,7 +341,7 @@ Base.unaliascopy(S::SparseMatrixCSC) = typeof(S)(S.m, S.n, unaliascopy(S.colptr)
 copy(S::SparseMatrixCSC) =
     SparseMatrixCSC(S.m, S.n, copy(S.colptr), copy(S.rowval), copy(S.nzval))
 
-copyto!(A::SparseMatrixCSC, B::SparseMatrixCSCViewAll) = copyto!(A, copy(B))
+copyto!(A::SparseMatrixCSC, B::SparseMatrixCSCFallback) = copyto!(A, copy(B))
 function copyto!(A::SparseMatrixCSC, B::SparseMatrixCSC)
     # If the two matrices have the same length then all the
     # elements in A will be overwritten.
@@ -491,7 +491,7 @@ SparseMatrixCSC{Tv,Ti}(M::Adjoint{<:Any,SparseMatrixCSC}) where {Tv,Ti} = Sparse
 SparseMatrixCSC{Tv,Ti}(M::Transpose{<:Any,SparseMatrixCSC}) where {Tv,Ti} = SparseMatrixCSC{Tv,Ti}(copy(M))
 
 # converting from SparseMatrixCSC to other matrix types
-Matrix(S::SparseMatrixCSCViewAll) = Matrix(copy(S))
+Matrix(S::SparseMatrixCSCFallback) = Matrix(copy(S))
 function Matrix(S::SparseMatrixCSCInterface{Tv}) where Tv
     m, n = size(S)
     rowval = rowvals(S)
@@ -507,13 +507,13 @@ function Matrix(S::SparseMatrixCSCInterface{Tv}) where Tv
     end
     return A
 end
-Array(S::SparseMatrixCSCViewAll) = Matrix(S)
+Array(S::SparseMatrixCSCFallback) = Matrix(S)
 
 convert(T::Type{<:SparseMatrixCSC}, m::AbstractMatrix) = m isa T ? m : T(m)
 
-float(S::SparseMatrixCSCViewAll) = float(copy(S))
+float(S::SparseMatrixCSCFallback) = float(copy(S))
 float(S::SparseMatrixCSC) = SparseMatrixCSC(S.m, S.n, copy(S.colptr), copy(S.rowval), float.(S.nzval))
-complex(S::SparseMatrixCSCViewAll) = complex(copy(S))
+complex(S::SparseMatrixCSCFallback) = complex(copy(S))
 complex(S::SparseMatrixCSC) = SparseMatrixCSC(S.m, S.n, copy(S.colptr), copy(S.rowval), complex(copy(S.nzval)))
 
 """
@@ -538,7 +538,7 @@ julia> sparse(A)
 """
 sparse(A::AbstractMatrix{Tv}) where {Tv} = convert(SparseMatrixCSC{Tv,Int}, A)
 
-sparse(S::SparseMatrixCSCViewAll) = copy(S)
+sparse(S::SparseMatrixCSCFallback) = copy(S)
 
 """
     sparse(I, J, V,[ m, n, combine])
@@ -886,7 +886,7 @@ respectively. Simultaneously fixes the one-position-forward shift in `X.colptr`.
     return # kill potential type instability
 end
 
-ftranspose!(X::SparseMatrixCSC{Tv,Ti}, A::SparseMatrixCSCViewAll{Tv,Ti}, f::Function) where {Tv,Ti} = ftranspose!(X, copy(A), f)
+ftranspose!(X::SparseMatrixCSC{Tv,Ti}, A::SparseMatrixCSCFallback{Tv,Ti}, f::Function) where {Tv,Ti} = ftranspose!(X, copy(A), f)
 function ftranspose!(X::SparseMatrixCSC{Tv,Ti}, A::SparseMatrixCSCInterface{Tv,Ti}, f::Function) where {Tv,Ti}
     m, n = size(A)
     # Check compatibility of source argument A and destination argument X
@@ -910,7 +910,7 @@ end
 transpose!(X::SparseMatrixCSC{Tv,Ti}, A::SparseMatrixCSCInterface{Tv,Ti}) where {Tv,Ti} = ftranspose!(X, A, identity)
 adjoint!(X::SparseMatrixCSC{Tv,Ti}, A::SparseMatrixCSCInterface{Tv,Ti}) where {Tv,Ti} = ftranspose!(X, A, conj)
 
-ftranspose(A::SparseMatrixCSCViewAll, f::Function) = ftranspose(copy(A), f)
+ftranspose(A::SparseMatrixCSCFallback, f::Function) = ftranspose(copy(A), f)
 function ftranspose(A::SparseMatrixCSCInterface{Tv,Ti}, f::Function) where {Tv,Ti}
     m, n = size(A)
     X = SparseMatrixCSC(n, m,
@@ -1349,11 +1349,11 @@ dropzeros(A::SparseMatrixCSC; trim::Bool = true) = dropzeros!(copy(A), trim = tr
 
 ## Find methods
 
-function findall(S::SparseMatrixCSCViewAll)
+function findall(S::SparseMatrixCSCFallback)
     return findall(identity, S)
 end
 
-findall(p::Function, S::SparseMatrixCSCViewAll) = findall(p, sparseinter(S))
+findall(p::Function, S::SparseMatrixCSCFallback) = findall(p, sparseinter(S))
 function findall(p::Function, S::SparseMatrixCSCInterface)
     if p(zero(eltype(S)))
         return invoke(findall, Tuple{Function, Any}, p, S)
@@ -1379,7 +1379,7 @@ end
 findall(p::Base.Fix2{typeof(in)}, x::SparseMatrixCSCInterface) =
     invoke(findall, Tuple{Base.Fix2{typeof(in)}, AbstractArray}, p, x)
 
-findnz(S::SparseMatrixCSCViewAll{Tv,Ti}) where {Tv,Ti} = findnz(copy(S))
+findnz(S::SparseMatrixCSCFallback{Tv,Ti}) where {Tv,Ti} = findnz(copy(S))
 function findnz(S::SparseMatrixCSCInterface{Tv,Ti}) where {Tv,Ti}
     numnz = nnz(S)
     I = Vector{Ti}(undef, numnz)
@@ -1602,6 +1602,7 @@ imag(A::SparseMatrixCSC{Tv,Ti}) where {Tv<:Real,Ti} = spzeros(Tv, Ti, A.m, A.n)
 (-)(A::Array, B::SparseMatrixCSC) = A - Array(B)
 
 ## full equality
+==(A1::SparseMatrixCSCFallback, A2::SparseMatrixCSCFallback) = copy(A1) == copy(A2)
 function ==(A1::SparseMatrixCSCInterface, A2::SparseMatrixCSCInterface)
     size(A1) != size(A2) && return false
     vals1, vals2 = nonzeros(A1), nonzeros(A2)
@@ -1610,8 +1611,9 @@ function ==(A1::SparseMatrixCSCInterface, A2::SparseMatrixCSCInterface)
     @inbounds for i = 1:n
         nz1,nz2 = nzrange(A1,i), nzrange(A2,i)
         j1,j2 = first(nz1), first(nz2)
+        k1,k2 = last(nz1), last(nz2)
         # step through the rows of both matrices at once:
-        while j1 <= last(nz1) && j2 <= last(nz2)
+        while j1 <= k1 && j2 <= k2
             r1,r2 = rows1[j1], rows2[j2]
             if r1==r2
                 vals1[j1]!=vals2[j2] && return false
@@ -1628,10 +1630,10 @@ function ==(A1::SparseMatrixCSCInterface, A2::SparseMatrixCSCInterface)
             end
         end
         # finish off any left-overs:
-        for j = j1:last(nz1)
+        for j = j1:k1
             vals1[j]!=0 && return false
         end
-        for j = j2:last(nz2)
+        for j = j2:k2
             vals2[j]!=0 && return false
         end
     end
@@ -1643,7 +1645,7 @@ end
 # In general, output of sparse matrix reductions will not be sparse,
 # and computing reductions along columns into SparseMatrixCSC is
 # non-trivial, so use Arrays for output. Array element type is given by `R`.
-function Base.reducedim_initarray(A::SparseMatrixCSCViewAll, region, v0, ::Type{R}) where {R}
+function Base.reducedim_initarray(A::SparseMatrixCSCFallback, region, v0, ::Type{R}) where {R}
     fill!(Array{R}(undef, Base.to_shape(Base.reduced_indices(A, region))), v0)
 end
 
@@ -1734,7 +1736,7 @@ function _mapreducecols!(f, op, R::AbstractArray, A::SparseMatrixCSCInterface{Tv
     R
 end
 
-Base._mapreducedim!(f, op, R::AbstractArray, A::SparseMatrixCSCViewAll) =
+Base._mapreducedim!(f, op, R::AbstractArray, A::SparseMatrixCSCFallback) =
     Base._mapreducedim!(f, op, R, copy(A))
 
 function Base._mapreducedim!(f, op, R::AbstractArray, A::SparseMatrixCSCInterface{T}) where T
@@ -3075,7 +3077,7 @@ dropstored!(A::SparseMatrixCSC, ::Colon) = dropstored!(A, :, :)
 
 vcat(X::SparseMatrixCSC...) = _vcat(X...)
 vcat(X::SparseMatrixCSCInterface...) = _vcat(X...)
-vcat(X::Union{SparseMatrixCSCViewAll,AbstractSparseVector}...) = _vcat(sparseinter.(X)...)
+vcat(X::Union{SparseMatrixCSCFallback,AbstractSparseVector}...) = _vcat(sparseinter.(X)...)
 function _vcat(X::SparseMatrixCSCInterface...)
     num = length(X)
     mX = Int[ size(x, 1) for x in X ]
@@ -3119,7 +3121,7 @@ function _vcat(X::SparseMatrixCSCInterface...)
 end
 
 sparseinter(A::SparseMatrixCSCInterface) = A
-sparseinter(A::SparseMatrixCSCViewAll) = copy(A)
+sparseinter(A::SparseMatrixCSCFallback) = copy(A)
 sparseinter(A::AbstractSparseVector) = SparseMatrixCSC(reshape(A, size(A, 1), size(A, 2)))
 
 @inline function stuffcol!(Xi::SparseMatrixCSCInterface, colptr, rowval, nzval,
@@ -3136,7 +3138,7 @@ end
 
 hcat(X::SparseMatrixCSC...) = _hcat(X...)
 hcat(X::SparseMatrixCSCInterface...) = _hcat(X...)
-hcat(X::Union{SparseMatrixCSCViewAll,AbstractSparseVector}...) = _hcat(sparseinter.(X)...)
+hcat(X::Union{SparseMatrixCSCFallback,AbstractSparseVector}...) = _hcat(sparseinter.(X)...)
 function _hcat(X::SparseMatrixCSCInterface...)
     num = length(X)
     mX = Int[ size(x, 1) for x in X ]
@@ -3166,7 +3168,7 @@ function _hcat(X::SparseMatrixCSCInterface...)
     SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
-#=function stuffmatrix!(XI::SparseMatrixCSCViewAll,
+#=function stuffmatrix!(XI::SparseMatrixCSCFallback,
                       colptr::Vector{Ti}, rowval::Vector{Ti}, nzval::Vector{Tv},
                       nXI::Int, nX_sofar::Int, nnz_sofar::Int, mX_sofar::Int) where {Tv,Ti}
 
@@ -3207,7 +3209,7 @@ julia> blockdiag(sparse(2I, 3, 3), sparse(4I, 2, 2))
 ```
 """
 function blockdiag end
-blockdiag(X::Union{SparseMatrixCSCViewAll,AbstractSparseVector}...) = _blockdiag(sparseinter.(X)...)
+blockdiag(X::Union{SparseMatrixCSCFallback,AbstractSparseVector}...) = _blockdiag(sparseinter.(X)...)
 function _blockdiag(X::SparseMatrixCSCInterface...)
     num = length(X)
     mX = Int[ size(x, 1) for x in X ]
