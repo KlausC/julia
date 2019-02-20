@@ -3354,6 +3354,7 @@ function tracker_stop(A::SparseMatrixCSCInterface{Tv,Ti}) where {Tv,Ti}
     tracker, stop
 end
 
+istriu(A::SparseMatrixCSCFallback) = istriu(sparse(A))
 function istriu(A::SparseMatrixCSCInterface)
     m, n = size(A)
     rowval = rowvals(A)
@@ -3375,6 +3376,7 @@ function istriu(A::SparseMatrixCSCInterface)
     return true
 end
 
+istril(A::SparseMatrixCSCFallback) = istril(sparse(A))
 function istril(A::SparseMatrixCSCInterface)
     m, n = size(A)
     rowval = rowvals(A)
