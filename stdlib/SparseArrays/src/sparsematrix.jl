@@ -54,13 +54,20 @@ const SparseMatrixCSCFallback{Tv,Ti} =
 const SparseMatrixCSCInterface{Tv,Ti} =
     Union{SubArray{Tv,2,SparseMatrixCSC{Tv,Ti},<:Tuple{<:AbstractUnitRange{<:Integer},<:AbstractVector{<:Integer}},false}, SparseMatrixCSCUnion{Tv,Ti}}
 
-rowvalview(S::SparseMatrixCSC)     = view(S.rowval, 1:nnz(S))
-rowvalview(S::SparseMatrixCSCView) = view(rowvals(S), first(nzrange(S,1)):last(nzrange(S,size(S,2))))
-rowvalview(S::SparseMatrixCSCInterface) = view(rowvals(S), vcat(nzrange.(Ref(S), axes(S,2))...))
-
-nzvalview(S::SparseMatrixCSC)     = view(S.nzval, 1:nnz(S))
-nzvalview(S::SparseMatrixCSCView) = view(nonzeros(S), first(nzrange(S,1)):last(nzrange(S,size(S,2))))
-nzvalview(S::SparseMatrixCSCInterface) = view(nonzeros(S), vcat(nzrange.(Ref(S), axes(S,2))...))
+nzrange(S::SparseMatrixCSC) = 1:nnz(S)
+nzrange(S::SparseMatrixCSCView) = first(nzrange(S,1)):last(nzrange(S,size(S,2)))
+function nzrange(S::SparseMatrixInterface)
+    res = Vector{Int}(undef, nnz(S))
+    ix = 0
+    for col in axes(S, 2)
+        for j in nzrange(S, col)
+            res[ix+1] = j
+        end
+    end
+    res
+end
+rowvalview(S::SparseMatrixCSCInterface) = view(rowvals(S), nzrange(S))
+nzvalview(S::SparseMatrixCSCInterface) = view(nonzeros(S), nzrange(S))
 
 """
     nnz(A)
@@ -198,9 +205,9 @@ view of a sparse matrix of the shown form:
        end
     end
 """
-nzrange(S::SparseMatrixCSC, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
-nzrange(S::SparseMatrixCSCView, col::Integer) = nzrange(S.parent, S.indices[2][col])
-function nzrange(S::SparseMatrixCSCInterface, i::Integer)
+@inline nzrange(S::SparseMatrixCSC, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
+@inline nzrange(S::SparseMatrixCSCView, col::Integer) = nzrange(S.parent, S.indices[2][col])
+@inline function nzrange(S::SparseMatrixCSCInterface, i::Integer)
     A = S.parent
     r = nzrange(A, S.indices[2][i])
     rvA = rowvals(A)
@@ -3174,7 +3181,32 @@ end
 
     stuffmatrix!(sparseinter(XI), colptr, rowval, nzval, nXI, nX_sofar, nnz_sofar, mX_sofar)
 end=#
-function stuffmatrix!(XI::SparseMatrixCSCInterface,
+@inline function stuffmatrix!(XI::SparseMatrixCSC,
+                      colptr::Vector{Ti}, rowval::Vector{Ti}, nzval::Vector{Tv},
+                      nXI::Int, nX_sofar::Int, nnz_sofar::Int, mX_sofar::Int) where {Tv,Ti}
+
+    nnzXI = nnz(XI)
+    rowvalX = rowvals(XI)
+    nzvalX = nonzeros(XI)
+    colptr[(1:nXI+1) .+ nX_sofar] = XI.colptr .+ nnz_sofar
+    if nnzXI == length(rowvalX)
+        if mX_sofar == 0
+            rowval[(1:nnzXI) .+ nnz_sofar] = rowvalX
+        else
+            rowval[(1:nnzXI) .+ nnz_sofar] = rowvalX .+ mX_sofar
+        end
+    else
+        rowval[(1:nnzXI) .+ nnz_sofar] = rowvalX[1:nnzXI] .+ mX_sofar
+    end
+    if nnzXI == length(nzvalX)
+        nzval[(1:nnzXI) .+ nnz_sofar] = nzvalX
+    else
+        nzval[(1:nnzXI) .+ nnz_sofar] = nzvalX[1:nnzXI]
+    end
+    nnz_sofar + nnzXI
+end
+
+@inline function stuffmatrix!(XI::SparseMatrixCSCInterface,
                       colptr::Vector{Ti}, rowval::Vector{Ti}, nzval::Vector{Tv},
                       nXI::Int, nX_sofar::Int, nnz_sofar::Int, mX_sofar::Int) where {Tv,Ti}
 
