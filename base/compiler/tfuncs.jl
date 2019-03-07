@@ -716,9 +716,12 @@ function getfield_tfunc(@nospecialize(s00), @nospecialize(name))
             end
         end
         s = typeof(sv)
-    elseif isa(s, PartialTuple)
+    elseif isa(s, PartialStruct)
         if isa(name, Const)
             nv = name.val
+            if isa(nv, Symbol)
+                nv = fieldindex(widenconst(s), nv, false)
+            end
             if isa(nv, Int) && 1 <= nv <= length(s.fields)
                 return s.fields[nv]
             end
@@ -1139,7 +1142,7 @@ function tuple_tfunc(atypes::Vector{Any})
     typ = Tuple{params...}
     # replace a singleton type with its equivalent Const object
     isdefined(typ, :instance) && return Const(typ.instance)
-    return anyinfo ? PartialTuple(typ, atypes) : typ
+    return anyinfo ? PartialStruct(typ, atypes) : typ
 end
 
 function array_type_undefable(@nospecialize(a))
@@ -1183,7 +1186,7 @@ function _builtin_nothrow(@nospecialize(f), argtypes::Array{Any,1}, @nospecializ
         # Check that the element type is compatible with the element we're assigning
         (argtypes[3] ⊑ a.parameters[1]::Type) || return false
         return true
-    elseif f === arrayref
+    elseif f === arrayref || f === const_arrayref
         return array_builtin_common_nothrow(argtypes, 3)
     elseif f === Core._expr
         length(argtypes) >= 1 || return false
@@ -1243,7 +1246,7 @@ function builtin_tfunction(@nospecialize(f), argtypes::Array{Any,1},
             return Bottom
         end
         return argtypes[2]
-    elseif f === arrayref
+    elseif f === arrayref || f === const_arrayref
         if length(argtypes) < 3
             isva && return Any
             return Bottom

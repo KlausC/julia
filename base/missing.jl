@@ -107,16 +107,25 @@ max(::Missing, ::Any)     = missing
 max(::Any,     ::Missing) = missing
 
 # Rounding and related functions
-for f in (:(ceil), :(floor), :(round), :(trunc))
+round(::Missing, ::RoundingMode=RoundNearest; sigdigits::Integer=0, digits::Integer=0, base::Integer=0) = missing
+round(::Type{>:Missing}, ::Missing, ::RoundingMode=RoundNearest) = missing
+round(::Type{T}, ::Missing, ::RoundingMode=RoundNearest) where {T} =
+    throw(MissingException("cannot convert a missing value to type $T: use Union{$T, Missing} instead"))
+round(::Type{T}, x::Any, r::RoundingMode=RoundNearest) where {T>:Missing} = round(nonmissingtype(T), x, r)
+# to fix ambiguities
+round(::Type{T}, x::Rational, r::RoundingMode=RoundNearest) where {T>:Missing} = round(nonmissingtype(T), x, r)
+round(::Type{T}, x::Rational{Bool}, r::RoundingMode=RoundNearest) where {T>:Missing} = round(nonmissingtype(T), x, r)
+
+# Handle ceil, floor, and trunc separately as they have no RoundingMode argument
+for f in (:(ceil), :(floor), :(trunc))
     @eval begin
-        ($f)(::Missing, digits::Integer=0, base::Integer=0) = missing
+        ($f)(::Missing; sigdigits::Integer=0, digits::Integer=0, base::Integer=0) = missing
         ($f)(::Type{>:Missing}, ::Missing) = missing
         ($f)(::Type{T}, ::Missing) where {T} =
             throw(MissingException("cannot convert a missing value to type $T: use Union{$T, Missing} instead"))
         ($f)(::Type{T}, x::Any) where {T>:Missing} = $f(nonmissingtype(T), x)
         # to fix ambiguities
         ($f)(::Type{T}, x::Rational) where {T>:Missing} = $f(nonmissingtype(T), x)
-        ($f)(::Type{T}, x::Rational{Bool}) where {T>:Missing} = $f(nonmissingtype(T), x)
     end
 end
 
@@ -153,6 +162,9 @@ float(A::AbstractArray{Missing}) = A
     skipmissing(itr)
 
 Return an iterator over the elements in `itr` skipping [`missing`](@ref) values.
+The returned object can be indexed using indices of `itr` if the latter is indexable.
+Indices corresponding to missing values are not valid: they are skipped by [`keys`](@ref)
+and [`eachindex`](@ref), and a `MissingException` is thrown when trying to use them.
 
 Use [`collect`](@ref) to obtain an `Array` containing the non-`missing` values in
 `itr`. Note that even if `itr` is a multidimensional array, the result will always
@@ -161,8 +173,26 @@ of the input.
 
 # Examples
 ```jldoctest
-julia> sum(skipmissing([1, missing, 2]))
+julia> x = skipmissing([1, missing, 2])
+Base.SkipMissing{Array{Union{Missing, Int64},1}}(Union{Missing, Int64}[1, missing, 2])
+
+julia> sum(x)
 3
+
+julia> x[1]
+1
+
+julia> x[2]
+ERROR: MissingException: the value at index (2,) is missing
+[...]
+
+julia> argmax(x)
+3
+
+julia> collect(keys(x))
+2-element Array{Int64,1}:
+ 1
+ 3
 
 julia> collect(skipmissing([1, missing, 2]))
 2-element Array{Int64,1}:
@@ -194,6 +224,17 @@ function iterate(itr::SkipMissing, state...)
         item, state = y
     end
     item, state
+end
+
+IndexStyle(::Type{<:SkipMissing{T}}) where {T} = IndexStyle(T)
+eachindex(itr::SkipMissing) =
+    Iterators.filter(i -> @inbounds(itr.x[i]) !== missing, eachindex(itr.x))
+keys(itr::SkipMissing) =
+    Iterators.filter(i -> @inbounds(itr.x[i]) !== missing, keys(itr.x))
+@propagate_inbounds function getindex(itr::SkipMissing, I...)
+    v = itr.x[I...]
+    v === missing && throw(MissingException("the value at index $I is missing"))
+    v
 end
 
 # Optimized mapreduce implementation

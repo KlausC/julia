@@ -316,6 +316,8 @@ jl_svec_t *jl_perm_symsvec(size_t n, ...);
 jl_value_t *jl_gc_realloc_string(jl_value_t *s, size_t sz);
 JL_DLLEXPORT void *jl_gc_counted_malloc(size_t sz);
 
+JL_DLLEXPORT void JL_NORETURN jl_throw_out_of_memory_error(void);
+
 jl_code_info_t *jl_type_infer(jl_method_instance_t **pli JL_ROOTS_TEMPORARILY, size_t world, int force);
 jl_callptr_t jl_generate_fptr(jl_method_instance_t **pli, jl_llvm_functions_t decls, size_t world);
 jl_llvm_functions_t jl_compile_linfo(
@@ -999,6 +1001,7 @@ extern jl_sym_t *structtype_sym;   extern jl_sym_t *foreigncall_sym;
 extern jl_sym_t *global_sym; extern jl_sym_t *list_sym;
 extern jl_sym_t *dot_sym;    extern jl_sym_t *newvar_sym;
 extern jl_sym_t *boundscheck_sym; extern jl_sym_t *inbounds_sym;
+extern jl_sym_t *aliasscope_sym; extern jl_sym_t *popaliasscope_sym;
 extern jl_sym_t *copyast_sym; extern jl_sym_t *cfunction_sym;
 extern jl_sym_t *pure_sym; extern jl_sym_t *simdloop_sym;
 extern jl_sym_t *meta_sym; extern jl_sym_t *inert_sym;

@@ -7,6 +7,11 @@ New language features
   * Argument splatting (`x...`) can now be used in calls to the `new` pseudo-function in
     constructors ([#30577]).
 
+  * Objects created by calling `skipmissing` on an array can now be indexed using indices
+    from the parent at non-missing positions. This allows functions such as
+    `findall`, `findfirst`, `argmin`/`argmax` and `findmin`/`findmax` to work with these
+    objects, returning the index of matching non-missing elements in the parent ([#31008]).
+
 Multi-threading changes
 -----------------------
 
@@ -39,6 +44,7 @@ Standard library changes
 * `startswith` and `endswith` now accept a `Regex` for the second argument ([#29790]).
 * `retry` supports arbitrary callable objects ([#30382]).
 * A no-argument construct to `Ptr{T}` has been added which constructs a null pointer ([#30919])
+* `strip` now accepts a function argument in the same manner as `lstrip` and `rstrip` ([#31211])
 
 #### LinearAlgebra
 
@@ -47,6 +53,7 @@ Standard library changes
 * Eigenvalues λ of general matrices are now sorted lexicographically by (Re λ, Im λ) ([#21598]).
 * `one` for structured matrices (`Diagonal`, `Bidiagonal`, `Tridiagonal`, `Symtridiagonal`) now preserves
   structure and type. ([#29777])
+* `diagm(v)` is now a shorthand for `diagm(0 => v)`. ([#31125]).
 
 #### SparseArrays
 
