@@ -275,13 +275,13 @@ function repeat(s::Union{String, SubString{String}}, r::Integer)
     r == 0 && return ""
     r == 1 && return String(s)
     n = sizeof(s)
-    out = _string_n(n*r)
-    if n == 1 # common case: repeating a single-byte string
-        @inbounds b = codeunit(s, 1)
-        memset(unsafe_convert(Ptr{UInt8}, out), b, r)
-    else
-        for i = 0:r-1
-            GC.@preserve s out unsafe_copyto!(pointer(out, i*n+1), pointer(s), n)
+    nr = n * r
+    out = _string_n(nr)
+    GC.@preserve s out begin
+        unsafe_copyto!(pointer(out), pointer(s), n)
+        while n < nr
+            unsafe_copyto!(pointer(out, n + 1), pointer(out), min(nr - n, n))
+            n <<= 1
         end
     end
     return out
